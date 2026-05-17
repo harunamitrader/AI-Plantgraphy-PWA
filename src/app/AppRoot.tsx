@@ -5,9 +5,11 @@ import "./styles.css";
 
 registerSW({ immediate: true });
 
+const routerBaseName = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
+
 export function AppRoot() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={routerBaseName}>
       <AppRouter />
     </BrowserRouter>
   );
