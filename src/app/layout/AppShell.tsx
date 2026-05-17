@@ -7,6 +7,7 @@ const navItems = [
   { to: "/plants", label: "図鑑" },
   { to: "/observations", label: "観察" },
   { to: "/upload", label: "追加" },
+  { to: "/backup", label: "バックアップ" },
   { to: "/review", label: "確認待ち" },
   { to: "/settings", label: "設定" },
 ];
@@ -14,16 +15,20 @@ const navItems = [
 export function AppShell() {
   const runtime = useRuntimeStatus();
   const install = useInstallPrompt();
+  const assetBase = import.meta.env.BASE_URL;
 
   return (
     <div className="app-shell">
       <header className="site-header">
         <div className="brand-block">
-          <div className="brand-mark">AI</div>
-          <div>
-            <p className="eyebrow">PWA</p>
-            <h1>AI Plantgraphy</h1>
-          </div>
+          <img
+            className="brand-mark"
+            src={`${assetBase}brand/ai-plantgraphy-icon.png`}
+            alt=""
+            width="32"
+            height="32"
+          />
+          <h1>AI Plantgraphy</h1>
         </div>
         <nav className="site-nav" aria-label="主要メニュー">
           {navItems.map((item) => (
