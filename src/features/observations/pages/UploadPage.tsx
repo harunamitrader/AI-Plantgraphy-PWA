@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { currentDateInputValue } from "../../../app/utils/time";
 import { useSettingsStore } from "../../settings/store/useSettingsStore";
 import { useRuntimeStatus } from "../../../app/hooks/useRuntimeStatus";
 import { createObservation } from "../../../storage/repositories/observationsRepository";
@@ -62,7 +63,7 @@ export function UploadPage() {
   const candidatesRef = useRef<PhotoCandidate[]>([]);
   const [candidates, setCandidates] = useState<PhotoCandidate[]>([]);
   const [cameraActive, setCameraActive] = useState(false);
-  const [capturedAt, setCapturedAt] = useState("");
+  const [capturedAt, setCapturedAt] = useState(() => currentDateInputValue());
   const [locationLabel, setLocationLabel] = useState(locationLabels[0] ?? "");
   const [note, setNote] = useState("");
   const [notice, setNotice] = useState<string | null>(null);

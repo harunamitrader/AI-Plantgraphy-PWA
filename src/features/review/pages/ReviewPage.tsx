@@ -44,6 +44,16 @@ function formatObservationStatus(status: Observation["status"]) {
   }
 }
 
+function getObservationElapsedEnd(observation: Observation) {
+  return observation.status === "queued" || observation.status === "analyzing" ? null : observation.updatedAt;
+}
+
+function getPlantElapsedEnd(plant: Plant) {
+  return plant.profileGenerationStatus === "queued" || plant.profileGenerationStatus === "analyzing"
+    ? null
+    : plant.profileGenerationUpdatedAt ?? plant.updatedAt;
+}
+
 export function ReviewPage() {
   const navigate = useNavigate();
   const runtime = useRuntimeStatus();
@@ -169,7 +179,8 @@ export function ReviewPage() {
                 </span>
               </div>
               <p className="status-copy">
-                {formatElapsedSeconds(plant.profileGenerationStartedAt, now) ?? "経過時間なし"}
+                {formatElapsedSeconds(plant.profileGenerationStartedAt, now, getPlantElapsedEnd(plant)) ??
+                  "経過時間なし"}
               </p>
               <div className="panel-actions">
                 <button
@@ -206,7 +217,8 @@ export function ReviewPage() {
                 <span className="status-badge">{formatObservationStatus(observation.status)}</span>
               </div>
               <p className="status-copy">
-                {formatElapsedSeconds(observation.createdAt, now) ?? "経過時間なし"}
+                {formatElapsedSeconds(observation.createdAt, now, getObservationElapsedEnd(observation)) ??
+                  "経過時間なし"}
               </p>
               <p className="status-copy">{observation.errorMessage || "エラーはありません。"}</p>
               <div className="panel-actions">

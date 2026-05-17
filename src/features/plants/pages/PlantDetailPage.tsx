@@ -7,6 +7,12 @@ import { getPlant } from "../../../storage/repositories/plantsRepository";
 import type { Plant } from "../../../types/domain";
 import { deletePlantWithRelations, startManualPlantGeneration } from "../services/generation";
 
+function getPlantElapsedEnd(plant: Plant) {
+  return plant.profileGenerationStatus === "queued" || plant.profileGenerationStatus === "analyzing"
+    ? null
+    : plant.profileGenerationUpdatedAt ?? plant.updatedAt;
+}
+
 export function PlantDetailPage() {
   const navigate = useNavigate();
   const runtime = useRuntimeStatus();
@@ -103,7 +109,10 @@ export function PlantDetailPage() {
               <p className="status-copy">
                 {plant.profileGenerationStatus === null
                   ? "生成完了"
-                  : `${plant.profileGenerationStatus} / ${formatElapsedSeconds(plant.profileGenerationStartedAt, now) ?? "経過時間なし"}`}
+                  : `${plant.profileGenerationStatus} / ${
+                      formatElapsedSeconds(plant.profileGenerationStartedAt, now, getPlantElapsedEnd(plant)) ??
+                      "経過時間なし"
+                    }`}
               </p>
               {plant.profileGenerationSeconds !== null ? (
                 <p className="status-copy">生成時間 {plant.profileGenerationSeconds.toFixed(1)}秒</p>

@@ -40,6 +40,12 @@ function formatObservationCount(count: number) {
   return `観察 ${count}件`;
 }
 
+function getPlantElapsedEnd(plant: Plant) {
+  return plant.profileGenerationStatus === "queued" || plant.profileGenerationStatus === "analyzing"
+    ? null
+    : plant.profileGenerationUpdatedAt ?? plant.updatedAt;
+}
+
 function summarizeProfile(text: string) {
   const trimmed = text.trim();
   if (!trimmed) {
@@ -284,7 +290,8 @@ export function PlantsPage() {
                 </div>
                 {plant.profileGenerationStatus ? (
                   <p className="status-copy">
-                    {formatElapsedSeconds(plant.profileGenerationStartedAt, now) ?? "経過時間なし"}
+                    {formatElapsedSeconds(plant.profileGenerationStartedAt, now, getPlantElapsedEnd(plant)) ??
+                      "経過時間なし"}
                   </p>
                 ) : plant.profileGenerationSeconds !== null ? (
                   <p className="status-copy">生成時間 {plant.profileGenerationSeconds.toFixed(1)}秒</p>

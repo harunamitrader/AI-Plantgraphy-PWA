@@ -134,6 +134,10 @@ function formatObservationStatus(status: Observation["status"]) {
   }
 }
 
+function getObservationElapsedEnd(observation: Observation) {
+  return observation.status === "queued" || observation.status === "analyzing" ? null : observation.updatedAt;
+}
+
 export function ObservationDetailPage() {
   const navigate = useNavigate();
   const runtime = useRuntimeStatus();
@@ -356,7 +360,10 @@ export function ObservationDetailPage() {
               <h3>{observation.locationLabel || "場所未設定"}</h3>
               <p className="status-copy">{formatObservationStatus(observation.status)}</p>
               <p className="status-copy">{observation.capturedAt ?? observation.createdAt}</p>
-              <p className="status-copy">{formatElapsedSeconds(observation.createdAt, now) ?? "経過時間なし"}</p>
+              <p className="status-copy">
+                {formatElapsedSeconds(observation.createdAt, now, getObservationElapsedEnd(observation)) ??
+                  "経過時間なし"}
+              </p>
               {observation.errorMessage ? <p className="status-copy">{observation.errorMessage}</p> : null}
             </article>
             <article className="placeholder-card">
