@@ -10,7 +10,7 @@ import {
 } from "../../../storage/repositories/observationsRepository";
 import type { Observation } from "../../../types/domain";
 import { buildPlantFromObservation } from "../../plants/services/generation";
-import { startObservationAnalysis } from "../services/analysis";
+import { requestStopObservationAnalysis, startObservationAnalysis } from "../services/analysis";
 
 type ObservationImageView = {
   id: string;
@@ -273,6 +273,30 @@ export function ObservationDetailPage() {
     }
   }
 
+  async function handleStopAnalysis() {
+    if (!observation) {
+      return;
+    }
+
+    setBusy(true);
+    setNotice("解析停止を要求しています。");
+    try {
+      await requestStopObservationAnalysis(observation.id);
+      await refreshCurrentObservation();
+      setNotice("解析を停止しました。");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "解析停止に失敗しました。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function applyCandidateToForm(candidate: CandidateView) {
+    setManualCommonName(candidate.commonNameJa ?? "");
+    setManualScientificName(candidate.scientificName ?? "");
+    setNotice("候補を手動補正フォームへ反映しました。");
+  }
+
   async function handleManualCorrection() {
     if (!observation) {
       return;
@@ -423,6 +447,15 @@ export function ObservationDetailPage() {
                       {candidate.scientificName || "学名未設定"} / {formatConfidence(candidate.confidence)}
                     </span>
                     {candidate.reason ? <span className="status-copy">{candidate.reason}</span> : null}
+                    <div className="panel-actions">
+                      <button
+                        className="ghost-button"
+                        type="button"
+                        onClick={() => applyCandidateToForm(candidate)}
+                      >
+                        この候補を補正欄に入れる
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -447,6 +480,16 @@ export function ObservationDetailPage() {
               >
                 {busy ? "処理中..." : "観察を再解析する"}
               </button>
+              {observation.status === "analyzing" ? (
+                <button
+                  className="danger-button"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void handleStopAnalysis()}
+                >
+                  解析を停止する
+                </button>
+              ) : null}
               {observation.rawResult ? (
                 <button
                   className="secondary-button"

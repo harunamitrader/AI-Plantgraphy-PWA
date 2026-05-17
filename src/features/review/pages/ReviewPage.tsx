@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useRuntimeStatus } from "../../../app/hooks/useRuntimeStatus";
 import { formatElapsedSeconds } from "../../../app/utils/time";
-import { startObservationAnalysis } from "../../observations/services/analysis";
+import { requestStopObservationAnalysis, startObservationAnalysis } from "../../observations/services/analysis";
 import {
   loadObservations,
   markObservationReviewed,
@@ -11,6 +11,7 @@ import { loadPlants } from "../../../storage/repositories/plantsRepository";
 import type { Observation, Plant } from "../../../types/domain";
 import {
   buildPlantFromObservation,
+  requestStopPlantGeneration,
   startManualPlantGeneration,
 } from "../../plants/services/generation";
 
@@ -197,6 +198,22 @@ export function ReviewPage() {
                 >
                   {busyKey === actionKey ? "処理中..." : "図鑑を再生成する"}
                 </button>
+                {plant.profileGenerationStatus === "queued" || plant.profileGenerationStatus === "analyzing" ? (
+                  <button
+                    className="danger-button"
+                    type="button"
+                    disabled={busyKey === `${actionKey}-stop`}
+                    onClick={() =>
+                      void runAction(
+                        `${actionKey}-stop`,
+                        () => requestStopPlantGeneration(plant.id),
+                        "図鑑生成を停止しました。",
+                      )
+                    }
+                  >
+                    {busyKey === `${actionKey}-stop` ? "停止中..." : "停止する"}
+                  </button>
+                ) : null}
                 <Link className="ghost-button" to={`/plants/${plant.id}`}>
                   図鑑詳細へ
                 </Link>
@@ -236,6 +253,22 @@ export function ReviewPage() {
                     }
                   >
                     {busyKey === actionKey ? "処理中..." : "再解析する"}
+                  </button>
+                ) : null}
+                {observation.status === "analyzing" ? (
+                  <button
+                    className="danger-button"
+                    type="button"
+                    disabled={busyKey === `${actionKey}-stop`}
+                    onClick={() =>
+                      void runAction(
+                        `${actionKey}-stop`,
+                        () => requestStopObservationAnalysis(observation.id),
+                        "観察解析を停止しました。",
+                      )
+                    }
+                  >
+                    {busyKey === `${actionKey}-stop` ? "停止中..." : "停止する"}
                   </button>
                 ) : null}
                 {observation.status === "needs_review" ? (

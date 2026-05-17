@@ -2,6 +2,7 @@ import { analyzeObservationWithGemini } from "../../../services/ai/geminiClient"
 import { useSettingsStore } from "../../settings/store/useSettingsStore";
 import {
   createOrUpdateJob,
+  loadJobByObservationId,
   updateJob,
 } from "../../../storage/repositories/jobsRepository";
 import {
@@ -26,6 +27,7 @@ export async function startObservationAnalysis(observationId: string) {
     phase: "analyzing",
     label: "観察を解析しています",
     percent: 10,
+    cancelRequested: false,
   });
 
   await setObservationStatus(observationId, {
@@ -50,6 +52,21 @@ export async function startObservationAnalysis(observationId: string) {
 
   try {
     const result = await analyzeObservationWithGemini(observation, settings);
+    const latestJob = await loadJobByObservationId(observationId);
+    if (latestJob?.cancelRequested) {
+      await setObservationStatus(observationId, {
+        status: "analysis_failed",
+        errorMessage: "解析を停止しました。",
+      });
+      await updateJob(job.id, {
+        phase: "failed",
+        percent: 100,
+        label: "解析を停止しました",
+        errorMessage: "解析を停止しました。",
+      });
+      return;
+    }
+
     const status = result.confidence !== null && result.confidence >= REVIEW_THRESHOLD ? "analyzed" : "needs_review";
     await setObservationStatus(observationId, {
       status,
@@ -86,4 +103,27 @@ export async function startObservationAnalysis(observationId: string) {
       errorMessage,
     });
   }
+}
+
+export async function requestStopObservationAnalysis(observationId: string) {
+  const observation = await getObservation(observationId);
+  if (!observation) {
+    throw new Error("観察が見つかりません。");
+  }
+
+  const job = await loadJobByObservationId(observationId);
+  if (job) {
+    await updateJob(job.id, {
+      phase: "stopping",
+      percent: job.percent,
+      label: "解析を停止しています",
+      cancelRequested: true,
+      errorMessage: null,
+    });
+  }
+
+  await setObservationStatus(observationId, {
+    status: "analysis_failed",
+    errorMessage: "解析を停止しました。",
+  });
 }

@@ -101,6 +101,7 @@ export async function startManualPlantGeneration(plantId: string) {
     phase: "analyzing",
     label: "図鑑を生成しています",
     percent: 10,
+    cancelRequested: false,
   });
 
   await updatePlantGenerationStatus(plantId, {
@@ -118,6 +119,17 @@ export async function startManualPlantGeneration(plantId: string) {
       },
       settings,
     );
+    const latestJob = await loadJobByPlantId(plantId);
+    if (latestJob?.cancelRequested) {
+      await markPlantGenerationFailed(plantId, "図鑑生成を停止しました。");
+      await updateJob(job.id, {
+        phase: "failed",
+        label: "図鑑生成を停止しました",
+        percent: 100,
+        errorMessage: "図鑑生成を停止しました。",
+      });
+      return;
+    }
 
     const saved = await saveCompletedPlantProfile({
       commonNameJa: result.commonNameJa,
@@ -222,6 +234,26 @@ export async function clearFinishedPlantJob(plantId: string) {
     percent: 100,
   });
   await deleteJob(job.id);
+}
+
+export async function requestStopPlantGeneration(plantId: string) {
+  const plant = await getPlant(plantId);
+  if (!plant) {
+    throw new Error("図鑑が見つかりません。");
+  }
+
+  const job = await loadJobByPlantId(plantId);
+  if (job) {
+    await updateJob(job.id, {
+      phase: "stopping",
+      percent: job.percent,
+      label: "図鑑生成を停止しています",
+      cancelRequested: true,
+      errorMessage: null,
+    });
+  }
+
+  await markPlantGenerationFailed(plantId, "図鑑生成を停止しました。");
 }
 
 export async function attachPlantToObservationIfPossible(observation: Observation) {

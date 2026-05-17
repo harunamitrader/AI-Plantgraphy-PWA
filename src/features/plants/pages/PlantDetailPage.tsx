@@ -5,7 +5,7 @@ import { formatElapsedSeconds } from "../../../app/utils/time";
 import { loadImageAsset } from "../../../storage/repositories/imagesRepository";
 import { getPlant } from "../../../storage/repositories/plantsRepository";
 import type { Plant } from "../../../types/domain";
-import { deletePlantWithRelations, startManualPlantGeneration } from "../services/generation";
+import { deletePlantWithRelations, requestStopPlantGeneration, startManualPlantGeneration } from "../services/generation";
 
 function getPlantElapsedEnd(plant: Plant) {
   return plant.profileGenerationStatus === "queued" || plant.profileGenerationStatus === "analyzing"
@@ -149,6 +149,30 @@ export function PlantDetailPage() {
                 >
                   {busy ? "再生成中..." : "図鑑内容を再生成する"}
                 </button>
+                {plant.profileGenerationStatus === "analyzing" || plant.profileGenerationStatus === "queued" ? (
+                  <button
+                    className="danger-button"
+                    type="button"
+                    disabled={busy}
+                    onClick={async () => {
+                      if (!plant) {
+                        return;
+                      }
+                      setBusy(true);
+                      setNotice("図鑑生成の停止を要求しています。");
+                      try {
+                        await requestStopPlantGeneration(plant.id);
+                        setNotice("図鑑生成を停止しました。");
+                      } catch (error) {
+                        setNotice(error instanceof Error ? error.message : "図鑑生成の停止に失敗しました。");
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    図鑑生成を停止する
+                  </button>
+                ) : null}
                 <button
                   className="ghost-button"
                   type="button"
