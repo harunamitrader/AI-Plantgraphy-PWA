@@ -1,22 +1,7 @@
 import { getAppDb } from "../db/appDb";
 import type { ImageAsset } from "../db/appDb";
 
-async function loadImageDimensions(blob: Blob) {
-  const imageUrl = URL.createObjectURL(blob);
-  try {
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const element = new Image();
-      element.onload = () => resolve(element);
-      element.onerror = () => reject(new Error("画像の読み込みに失敗しました。"));
-      element.src = imageUrl;
-    });
-    return { width: image.naturalWidth || 0, height: image.naturalHeight || 0 };
-  } finally {
-    URL.revokeObjectURL(imageUrl);
-  }
-}
-
-async function createThumbnailBlob(blob: Blob) {
+async function createResizedJpegBlob(blob: Blob, maxSide: number, quality: number) {
   const imageUrl = URL.createObjectURL(blob);
   try {
     const image = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -26,7 +11,6 @@ async function createThumbnailBlob(blob: Blob) {
       element.src = imageUrl;
     });
 
-    const maxSide = 480;
     const scale = Math.min(1, maxSide / Math.max(image.naturalWidth || 1, image.naturalHeight || 1));
     const width = Math.max(1, Math.round((image.naturalWidth || 1) * scale));
     const height = Math.max(1, Math.round((image.naturalHeight || 1) * scale));
@@ -36,8 +20,10 @@ async function createThumbnailBlob(blob: Blob) {
     canvas.height = height;
     const context = canvas.getContext("2d");
     if (!context) {
-      throw new Error("サムネイル用キャンバスを初期化できませんでした。");
+      throw new Error("画像変換用キャンバスを初期化できませんでした。");
     }
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
     context.drawImage(image, 0, 0, width, height);
 
     const output = await new Promise<Blob>((resolve, reject) => {
@@ -45,15 +31,19 @@ async function createThumbnailBlob(blob: Blob) {
         if (result) {
           resolve(result);
         } else {
-          reject(new Error("サムネイルの書き出しに失敗しました。"));
+          reject(new Error("画像の書き出しに失敗しました。"));
         }
-      }, blob.type || "image/jpeg", 0.82);
+      }, "image/jpeg", quality);
     });
 
     return { blob: output, width, height };
   } finally {
     URL.revokeObjectURL(imageUrl);
   }
+}
+
+async function createThumbnailBlob(blob: Blob) {
+  return createResizedJpegBlob(blob, 480, 0.82);
 }
 
 export async function saveObservationImages(files: File[], sourceObservationId: string) {
@@ -64,15 +54,15 @@ export async function saveObservationImages(files: File[], sourceObservationId: 
 
   for (const file of files) {
     const originalId = crypto.randomUUID();
-    const dimensions = await loadImageDimensions(file);
+    const optimized = await createResizedJpegBlob(file, 1280, 0.78);
     const originalRecord: ImageAsset = {
       id: originalId,
       kind: "original",
-      blob: file,
-      mimeType: file.type || "application/octet-stream",
-      width: dimensions.width,
-      height: dimensions.height,
-      byteSize: file.size,
+      blob: optimized.blob,
+      mimeType: optimized.blob.type || "image/jpeg",
+      width: optimized.width,
+      height: optimized.height,
+      byteSize: optimized.blob.size,
       sourceObservationId,
       createdAt: now,
     };
@@ -80,7 +70,7 @@ export async function saveObservationImages(files: File[], sourceObservationId: 
     await database.put("images", originalRecord);
 
     const thumbnailId = crypto.randomUUID();
-    const thumbnail = await createThumbnailBlob(file);
+    const thumbnail = await createThumbnailBlob(optimized.blob);
     thumbnails.push({
       id: thumbnailId,
       kind: "thumbnail",

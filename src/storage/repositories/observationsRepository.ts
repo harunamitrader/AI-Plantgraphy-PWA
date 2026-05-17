@@ -117,6 +117,68 @@ export async function setObservationStatus(
   return next;
 }
 
+export async function updateObservationManualCorrection(
+  observationId: string,
+  input: {
+    commonNameJa: string;
+    scientificName: string;
+    locationLabel: string;
+    note: string;
+  },
+) {
+  const database = await getAppDb();
+  const existing = await database.get("observations", observationId);
+  if (!existing) {
+    return null;
+  }
+
+  const commonNameJa = input.commonNameJa.trim();
+  const scientificName = input.scientificName.trim();
+  const locationLabel = input.locationLabel.trim();
+  const note = input.note.trim();
+
+  if (!commonNameJa && !scientificName) {
+    throw new Error("植物名または学名を入力してください。");
+  }
+
+  if (!locationLabel) {
+    throw new Error("場所を入力してください。");
+  }
+
+  const now = new Date().toISOString();
+  const manualResult = {
+    ...(existing.rawResult && typeof existing.rawResult === "object" ? existing.rawResult : {}),
+    commonNameJa: commonNameJa || null,
+    scientificName: scientificName || null,
+    confidence: 1,
+    candidates: [
+      {
+        commonNameJa: commonNameJa || null,
+        scientificName: scientificName || null,
+        confidence: 1,
+        reason: "手動補正で確定しました。",
+      },
+    ],
+    uncertaintyNotes: "",
+    correctedManually: true,
+    correctedAt: now,
+  };
+
+  const next: PersistedObservationRecord = {
+    ...existing,
+    schemaVersion: SCHEMA_VERSION,
+    status: "analyzed",
+    confidence: 1,
+    rawResult: manualResult,
+    errorMessage: "",
+    locationLabel,
+    note,
+    updatedAt: now,
+  };
+  await database.put("observations", next);
+  return next;
+}
+
 export async function clearPlantLinks(plantId: string) {
   const database = await getAppDb();
   const linkedObservations = await loadObservationsByPlantId(plantId);

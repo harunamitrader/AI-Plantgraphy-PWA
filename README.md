@@ -19,6 +19,7 @@ AI-Plantgraphy PWA は、植物観察と植物図鑑を `PWA` として提供す
 - 実装計画: [docs/IMPLEMENTATION-PLAN.md](docs/IMPLEMENTATION-PLAN.md)
 - データモデル: [docs/DATA-MODEL.md](docs/DATA-MODEL.md)
 - 画面ワイヤー: [docs/UI-WIREFRAME.md](docs/UI-WIREFRAME.md)
+- 既存版との差分: [docs/FEATURE-GAP-ANALYSIS.md](docs/FEATURE-GAP-ANALYSIS.md)
 
 ## プロダクト方針
 

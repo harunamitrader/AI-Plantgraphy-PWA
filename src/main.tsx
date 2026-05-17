@@ -4,7 +4,9 @@ import { registerSW } from "virtual:pwa-register";
 import App from "./App";
 import { ensureAppDbReady } from "./storage/db/appDb";
 
-registerSW({ immediate: true });
+if (import.meta.env.PROD) {
+  registerSW({ immediate: true });
+}
 void ensureAppDbReady();
 
 createRoot(document.getElementById("root")!).render(

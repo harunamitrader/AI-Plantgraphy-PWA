@@ -7,6 +7,9 @@ export default defineConfig(({ command }) => {
 
   return {
     base,
+    server: {
+      hmr: false,
+    },
     plugins: [
       react(),
       VitePWA({
