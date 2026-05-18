@@ -3,14 +3,30 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useRuntimeStatus } from "../../../app/hooks/useRuntimeStatus";
 import { formatElapsedSeconds } from "../../../app/utils/time";
 import { loadImageAsset } from "../../../storage/repositories/imagesRepository";
+import { loadObservationImages, loadObservationsByPlantId } from "../../../storage/repositories/observationsRepository";
 import { getPlant } from "../../../storage/repositories/plantsRepository";
-import type { Plant } from "../../../types/domain";
+import type { Observation, Plant } from "../../../types/domain";
 import { deletePlantWithRelations, requestStopPlantGeneration, startManualPlantGeneration } from "../services/generation";
+
+type RelatedPhoto = {
+  id: string;
+  observationId: string;
+  url: string;
+  capturedAt: string | null;
+};
 
 function getPlantElapsedEnd(plant: Plant) {
   return plant.profileGenerationStatus === "queued" || plant.profileGenerationStatus === "analyzing"
     ? null
     : plant.profileGenerationUpdatedAt ?? plant.updatedAt;
+}
+
+function formatObservationDate(observation: Observation) {
+  return observation.capturedAt || observation.createdAt.slice(0, 10);
+}
+
+function formatConfidence(confidence: number | null) {
+  return confidence === null ? "信頼度 不明" : `信頼度 ${Math.round(confidence * 100)}%`;
 }
 
 export function PlantDetailPage() {
@@ -19,6 +35,8 @@ export function PlantDetailPage() {
   const { plantId } = useParams();
   const [plant, setPlant] = useState<Plant | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [relatedObservations, setRelatedObservations] = useState<Observation[]>([]);
+  const [relatedPhotos, setRelatedPhotos] = useState<RelatedPhoto[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -87,6 +105,54 @@ export function PlantDetailPage() {
     };
   }, [plant]);
 
+  useEffect(() => {
+    let mounted = true;
+    const objectUrls: string[] = [];
+
+    async function refreshRelatedContent() {
+      if (!plantId) {
+        return;
+      }
+
+      const observations = await loadObservationsByPlantId(plantId);
+      const photoEntries = (
+        await Promise.all(
+          observations.map(async (observation) => {
+            const images = await loadObservationImages(observation.id);
+            return images
+              .filter((image) => image.kind === "thumbnail")
+              .map((image) => {
+                const url = URL.createObjectURL(image.blob);
+                objectUrls.push(url);
+                return {
+                  id: image.id,
+                  observationId: observation.id,
+                  url,
+                  capturedAt: observation.capturedAt,
+                } satisfies RelatedPhoto;
+              });
+          }),
+        )
+      )
+        .flat()
+        .slice(0, 12);
+
+      if (mounted) {
+        setRelatedObservations(observations);
+        setRelatedPhotos(photoEntries);
+      } else {
+        objectUrls.forEach((url) => URL.revokeObjectURL(url));
+      }
+    }
+
+    void refreshRelatedContent();
+
+    return () => {
+      mounted = false;
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [plantId]);
+
   return (
     <section className="panel stack">
       <div>
@@ -104,7 +170,7 @@ export function PlantDetailPage() {
               <p className="status-copy">{plant.scientificName ?? "学名未確定"}</p>
               <div className="card-meta">
                 <span className="card-chip">{plant.createdFrom === "manual" ? "手動作成" : "観察由来"}</span>
-                <span className="card-chip">観察 {plant.observationCount}件</span>
+                <span className="card-chip">観察 {relatedObservations.length || plant.observationCount}件</span>
               </div>
               <p className="status-copy">
                 {plant.profileGenerationStatus === null
@@ -201,6 +267,23 @@ export function PlantDetailPage() {
           {notice ? <p className="status-copy">{notice}</p> : null}
 
           <article className="placeholder-card">
+            <p className="eyebrow">Photos</p>
+            <h3>関連写真</h3>
+            {relatedPhotos.length > 0 ? (
+              <div className="plant-photo-grid">
+                {relatedPhotos.map((photo) => (
+                  <Link className="plant-photo-card" key={photo.id} to={`/observations/${photo.observationId}`}>
+                    <img src={photo.url} alt="関連観察画像" />
+                    <span>{photo.capturedAt ?? "日付未設定"}</span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p>この図鑑に紐付いた観察写真はまだありません。</p>
+            )}
+          </article>
+
+          <article className="placeholder-card">
             <p className="eyebrow">PROFILE</p>
             <h3>基本的な特徴</h3>
             <p>{plant.basicProfileText || "未入力です。"}</p>
@@ -219,6 +302,26 @@ export function PlantDetailPage() {
             <summary>生成JSONを表示</summary>
             <pre className="status-copy">{JSON.stringify(plant.profileGeneratedJson ?? null, null, 2)}</pre>
           </details>
+          <article className="placeholder-card">
+            <p className="eyebrow">Timeline</p>
+            <h3>観察履歴</h3>
+            {relatedObservations.length > 0 ? (
+              <div className="timeline-list">
+                {relatedObservations.map((observation) => (
+                  <Link className="timeline-row" key={observation.id} to={`/observations/${observation.id}`}>
+                    <strong>{formatObservationDate(observation)}</strong>
+                    <span>{observation.locationLabel || "場所未設定"}</span>
+                    <span className="status-copy">
+                      {observation.status} / {formatConfidence(observation.confidence)}
+                    </span>
+                    {observation.note ? <span className="status-copy">{observation.note}</span> : null}
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p>この図鑑に紐付いた観察履歴はまだありません。</p>
+            )}
+          </article>
           <Link className="ghost-button" to="/plants">
             図鑑一覧へ戻る
           </Link>
