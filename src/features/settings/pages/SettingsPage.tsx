@@ -1,7 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useInstallPrompt } from "../../../app/hooks/useInstallPrompt";
 import { useRuntimeStatus } from "../../../app/hooks/useRuntimeStatus";
 import { MODEL_OPTIONS } from "../../../app/constants";
+import {
+  formatBytes,
+  getDiagnosticsSummary,
+  type DiagnosticsSummary,
+} from "../../../services/diagnostics/diagnostics";
 import { useSettingsStore } from "../store/useSettingsStore";
 
 export function SettingsPage() {
@@ -16,6 +21,24 @@ export function SettingsPage() {
   const removeLocationLabel = useSettingsStore((state) => state.removeLocationLabel);
   const reset = useSettingsStore((state) => state.reset);
   const [draftLabel, setDraftLabel] = useState("");
+  const [diagnostics, setDiagnostics] = useState<DiagnosticsSummary | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function refreshDiagnostics() {
+      const next = await getDiagnosticsSummary();
+      if (mounted) {
+        setDiagnostics(next);
+      }
+    }
+
+    void refreshDiagnostics();
+
+    return () => {
+      mounted = false;
+    };
+  }, [apiKey, model, locationLabels]);
 
   function submitLabel() {
     if (!draftLabel.trim()) {
@@ -42,6 +65,41 @@ export function SettingsPage() {
             ? "この端末にはアプリとしてインストール済みです。"
             : "Android Chrome では、設定後にホーム画面へ追加してアプリ化できます。"}
         </p>
+      </section>
+
+      <section className="panel stack">
+        <div>
+          <p className="eyebrow">Diagnostics</p>
+          <h2>診断</h2>
+          <p className="status-copy">PWA版で必要な端末内保存、APIキー、バックアップ対象を確認します。</p>
+        </div>
+        <div className="status-grid">
+          <article className="placeholder-card">
+            <p className="eyebrow">API</p>
+            <h3>{diagnostics?.settings.hasApiKey ? "設定済み" : "未設定"}</h3>
+            <p className="status-copy">{diagnostics?.settings.model ?? model}</p>
+          </article>
+          <article className="placeholder-card">
+            <p className="eyebrow">Storage</p>
+            <h3>{formatBytes(diagnostics?.storage.usageBytes ?? null)}</h3>
+            <p className="status-copy">
+              上限 {formatBytes(diagnostics?.storage.quotaBytes ?? null)}
+              {diagnostics?.storage.usagePercent !== null && diagnostics?.storage.usagePercent !== undefined
+                ? ` / ${diagnostics.storage.usagePercent}%`
+                : ""}
+            </p>
+          </article>
+          <article className="placeholder-card">
+            <p className="eyebrow">Images</p>
+            <h3>{diagnostics?.storage.imageCount ?? 0}件</h3>
+            <p className="status-copy">{formatBytes(diagnostics?.storage.imageBytes ?? null)}</p>
+          </article>
+          <article className="placeholder-card">
+            <p className="eyebrow">Backup</p>
+            <h3>{diagnostics?.backup.exportableRecords ?? 0}件</h3>
+            <p className="status-copy">バックアップ対象レコード</p>
+          </article>
+        </div>
       </section>
 
       <section className="panel stack">

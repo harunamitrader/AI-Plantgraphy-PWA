@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { appDbStatusText } from "../../../storage/db/appDb";
 import { createBackupZip, getBackupSummary, importBackupZip } from "../../../services/backup/backup";
+import {
+  formatBytes,
+  getDiagnosticsSummary,
+  type DiagnosticsSummary,
+} from "../../../services/diagnostics/diagnostics";
 
 function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
@@ -19,6 +24,7 @@ export function BackupPage() {
     jobs: 0,
     images: 0,
   });
+  const [diagnostics, setDiagnostics] = useState<DiagnosticsSummary | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -30,6 +36,7 @@ export function BackupPage() {
       const next = await getBackupSummary();
       if (mounted) {
         setSummary(next);
+        setDiagnostics(await getDiagnosticsSummary());
       }
     }
 
@@ -64,6 +71,7 @@ export function BackupPage() {
       await importBackupZip(file);
       const next = await getBackupSummary();
       setSummary(next);
+      setDiagnostics(await getDiagnosticsSummary());
       setNotice("バックアップを復元しました。");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "バックアップの復元に失敗しました。");
@@ -121,6 +129,28 @@ export function BackupPage() {
           <article className="placeholder-card">
             <p className="eyebrow">Images</p>
             <h3>{summary.images}件</h3>
+          </article>
+        </div>
+        <div className="status-grid">
+          <article className="placeholder-card">
+            <p className="eyebrow">Usage</p>
+            <h3>{formatBytes(diagnostics?.storage.usageBytes ?? null)}</h3>
+            <p className="status-copy">
+              保存上限 {formatBytes(diagnostics?.storage.quotaBytes ?? null)}
+              {diagnostics?.storage.usagePercent !== null && diagnostics?.storage.usagePercent !== undefined
+                ? ` / ${diagnostics.storage.usagePercent}%`
+                : ""}
+            </p>
+          </article>
+          <article className="placeholder-card">
+            <p className="eyebrow">Image Size</p>
+            <h3>{formatBytes(diagnostics?.storage.imageBytes ?? null)}</h3>
+            <p className="status-copy">画像レコード合計</p>
+          </article>
+          <article className="placeholder-card">
+            <p className="eyebrow">API</p>
+            <h3>{diagnostics?.settings.hasApiKey ? "設定済み" : "未設定"}</h3>
+            <p className="status-copy">{diagnostics?.settings.model ?? "モデル未確認"}</p>
           </article>
         </div>
       </article>
