@@ -19,7 +19,6 @@ PWA版は `インストール + APIキー入力` だけで使う目的には近�
 特に差が大きいのは以下。
 
 - 診断、接続ガイド、ログ、Discord通知などの保守機能
-- 既存SQLite/画像からPWA形式への移行
 
 一方で、PWA版では自宅PC、Tailscale、Gemini CLI、FastAPIが不要になるため、それらに依存する機能は同じ形で移植する必要はない。
 
@@ -51,7 +50,7 @@ PWA版は `インストール + APIキー入力` だけで使う目的には近�
 | 接続 | Tailscale HTTPS URL、LAN URL、QRコード表示 | 不要。GitHub Pages URLだけで起動 | PWAでは仕様差 | 対応不要 |
 | 未送信 | PC停止中に下書き保存し、後でPCへ送信 | PWAは最初から端末内保存 | 仕様差。未送信概念は不要 | 対応不要 |
 | バックアップ | PC側SQLiteと画像をzip化し、PCにも保存 | PWA内データをzipで書き出し/読み込み | 目的は対応。ただし既存版形式とは互換なし | 中 |
-| 移行 | 既存SQLite/画像をそのまま利用 | 移行スクリプトなし | 旧版ユーザーのデータ移行ができない | 高 |
+| 移行 | 既存SQLite/画像をそのまま利用 | 対応済み。PWAバックアップzipへ変換するスクリプトを追加 | 旧版ユーザーのデータをPWAへ持ち込める | 低 |
 | ログ | `data/logs/server.log` に解析・通知・エラーを記録 | 永続ログなし | 実機トラブル時の原因追跡が難しい | 中 |
 | Discord通知 | 解析完了・失敗をWebhook通知 | 未実装 | 通知運用をしている場合は代替なし | 低 |
 | PC管理画面 | 保守用HTML、診断、バックアップ、設定 | PWA単体の画面のみ | PWAでは基本不要 | 対応不要 |
@@ -133,17 +132,17 @@ PWA版は `インストール + APIキー入力` だけで使う目的には近�
 
 ### 5. 既存データ移行
 
-旧版を使っているデータをPWA版へ持ち込めないと、実運用の切り替えが難しい。
+対応済み。旧版を使っているデータをPWA版へ持ち込むための変換スクリプトを追加した。
 
-実装候補:
+実装済み:
 
 - 旧版 `plants.sqlite` と `data/images` からPWAバックアップzipを作る変換スクリプト
-- PWA側のインポート仕様との互換確認
+- 旧版エクスポートzipからPWAバックアップzipを作る変換スクリプト
 - 移行手順書
 
 対象候補:
 
-- `C:\Users\sgmxk\Desktop\AI\repos\local\AI-Plantgraphy-PWA\scripts`
+- `C:\Users\sgmxk\Desktop\AI\repos\local\AI-Plantgraphy-PWA\scripts\migrate_legacy_export.py`
 - `C:\Users\sgmxk\Desktop\AI\repos\local\AI-Plantgraphy-PWA\docs\MIGRATION.md`
 
 ## PWA版では同じ形で移植しない項目
@@ -162,8 +161,7 @@ PWA版は `インストール + APIキー入力` だけで使う目的には近�
 
 ## 実装順の提案
 
-1. `旧版データ移行スクリプト`
-2. `保存容量・APIキー・バックアップの診断表示`
-3. `Discord通知など任意機能`
+1. `保存容量・APIキー・バックアップの診断表示`
+2. `Discord通知など任意機能`
 
 この順番なら、PWA版を実機で使ったときの不足感を先に減らし、その後に旧版からの移行と保守性を詰められる。
