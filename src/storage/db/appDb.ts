@@ -1,8 +1,8 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
-import type { AnalysisJob, AppSettings, Observation, Plant } from "../../types/domain";
+import type { AnalysisJob, AppLog, AppSettings, Observation, Plant } from "../../types/domain";
 
 export const APP_DB_NAME = "ai-plantgraphy-pwa";
-export const APP_DB_VERSION = 1;
+export const APP_DB_VERSION = 2;
 
 export const STORE_NAMES = {
   settings: "settings",
@@ -10,6 +10,7 @@ export const STORE_NAMES = {
   plants: "plants",
   images: "images",
   jobs: "jobs",
+  logs: "logs",
 } as const;
 
 export type ImageAsset = {
@@ -65,6 +66,15 @@ export interface AppDatabaseSchema extends DBSchema {
       "by-updatedAt": number;
     };
   };
+  logs: {
+    key: string;
+    value: AppLog & { schemaVersion: 1 };
+    indexes: {
+      "by-createdAt": string;
+      "by-severity": AppLog["severity"];
+      "by-source": AppLog["source"];
+    };
+  };
 }
 
 let databasePromise: Promise<IDBPDatabase<AppDatabaseSchema>> | null = null;
@@ -103,6 +113,13 @@ export function getAppDb() {
           const store = database.createObjectStore(STORE_NAMES.jobs, { keyPath: "id" });
           store.createIndex("by-observationId", "observationId");
           store.createIndex("by-updatedAt", "updatedAt");
+        }
+
+        if (!database.objectStoreNames.contains(STORE_NAMES.logs)) {
+          const store = database.createObjectStore(STORE_NAMES.logs, { keyPath: "id" });
+          store.createIndex("by-createdAt", "createdAt");
+          store.createIndex("by-severity", "severity");
+          store.createIndex("by-source", "source");
         }
       },
     });

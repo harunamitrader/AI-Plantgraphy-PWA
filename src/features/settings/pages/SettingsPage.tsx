@@ -7,7 +7,27 @@ import {
   getDiagnosticsSummary,
   type DiagnosticsSummary,
 } from "../../../services/diagnostics/diagnostics";
+import { clearLogs, loadLogs } from "../../../storage/repositories/logsRepository";
+import type { AppLog } from "../../../types/domain";
 import { useSettingsStore } from "../store/useSettingsStore";
+
+function formatLogDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString("ja-JP");
+}
+
+function severityLabel(severity: AppLog["severity"]) {
+  if (severity === "error") {
+    return "エラー";
+  }
+  if (severity === "warning") {
+    return "警告";
+  }
+  return "情報";
+}
 
 export function SettingsPage() {
   const runtime = useRuntimeStatus();
@@ -22,18 +42,21 @@ export function SettingsPage() {
   const reset = useSettingsStore((state) => state.reset);
   const [draftLabel, setDraftLabel] = useState("");
   const [diagnostics, setDiagnostics] = useState<DiagnosticsSummary | null>(null);
+  const [logs, setLogs] = useState<AppLog[]>([]);
+  const [logNotice, setLogNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
 
-    async function refreshDiagnostics() {
-      const next = await getDiagnosticsSummary();
+    async function refreshStatus() {
+      const [nextDiagnostics, nextLogs] = await Promise.all([getDiagnosticsSummary(), loadLogs()]);
       if (mounted) {
-        setDiagnostics(next);
+        setDiagnostics(nextDiagnostics);
+        setLogs(nextLogs);
       }
     }
 
-    void refreshDiagnostics();
+    void refreshStatus();
 
     return () => {
       mounted = false;
@@ -46,6 +69,13 @@ export function SettingsPage() {
     }
     addLocationLabel(draftLabel);
     setDraftLabel("");
+  }
+
+  async function handleClearLogs() {
+    await clearLogs();
+    setLogs([]);
+    setLogNotice("ログを削除しました。");
+    setDiagnostics(await getDiagnosticsSummary());
   }
 
   return (
@@ -99,6 +129,48 @@ export function SettingsPage() {
             <h3>{diagnostics?.backup.exportableRecords ?? 0}件</h3>
             <p className="status-copy">バックアップ対象レコード</p>
           </article>
+          <article className="placeholder-card">
+            <p className="eyebrow">Logs</p>
+            <h3>{diagnostics?.storage.logCount ?? 0}件</h3>
+            <p className="status-copy">端末内の履歴</p>
+          </article>
+        </div>
+      </section>
+
+      <section className="panel stack">
+        <div>
+          <p className="eyebrow">Logs</p>
+          <h2>ログ</h2>
+          <p className="status-copy">解析、図鑑生成、バックアップの最新履歴を端末内に保存します。</p>
+        </div>
+        <div className="panel-actions">
+          <button className="ghost-button" type="button" onClick={handleClearLogs} disabled={logs.length === 0}>
+            ログを削除
+          </button>
+        </div>
+        {logNotice ? <p className="status-copy">{logNotice}</p> : null}
+        <div className="log-list">
+          {logs.length > 0 ? (
+            logs.map((log) => (
+              <article className={`log-row is-${log.severity}`} key={log.id}>
+                <div className="log-row-header">
+                  <span className="status-badge">{severityLabel(log.severity)}</span>
+                  <span className="status-copy">{log.source}</span>
+                  <span className="status-copy">{formatLogDate(log.createdAt)}</span>
+                </div>
+                <strong>{log.message}</strong>
+                {log.observationId || log.plantId || log.jobId ? (
+                  <p className="status-copy">
+                    {log.observationId ? `観察: ${log.observationId} ` : ""}
+                    {log.plantId ? `図鑑: ${log.plantId} ` : ""}
+                    {log.jobId ? `ジョブ: ${log.jobId}` : ""}
+                  </p>
+                ) : null}
+              </article>
+            ))
+          ) : (
+            <p className="status-copy">ログはまだありません。</p>
+          )}
         </div>
       </section>
 

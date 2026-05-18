@@ -613,6 +613,37 @@ h3 {
   background: #f7fbf8;
 }
 
+.log-list {
+  display: grid;
+  gap: 5px;
+}
+
+.log-row {
+  display: grid;
+  gap: 4px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f7fbf8;
+}
+
+.log-row.is-warning {
+  border-color: #efd38b;
+  background: #fff8e7;
+}
+
+.log-row.is-error {
+  border-color: #ffc8bd;
+  background: #fff7f5;
+}
+
+.log-row-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
 .page-columns {
   display: grid;
   gap: 7px;

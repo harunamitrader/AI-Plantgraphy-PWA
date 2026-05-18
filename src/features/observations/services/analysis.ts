@@ -9,6 +9,7 @@ import {
   getObservation,
   setObservationStatus,
 } from "../../../storage/repositories/observationsRepository";
+import { addLog } from "../../../storage/repositories/logsRepository";
 import { attachPlantToObservationIfPossible } from "../../plants/services/generation";
 
 const REVIEW_THRESHOLD = 0.65;
@@ -34,6 +35,14 @@ export async function startObservationAnalysis(observationId: string) {
     status: "analyzing",
     errorMessage: "",
   });
+  await addLog({
+    severity: "info",
+    source: "observation-analysis",
+    message: "観察解析を開始しました。",
+    observationId,
+    jobId: job.id,
+    details: { model: settings.model },
+  });
 
   if (!settings.apiKey) {
     const errorMessage = "Gemini API キーが設定されていません。";
@@ -46,6 +55,13 @@ export async function startObservationAnalysis(observationId: string) {
       percent: 100,
       label: "解析に失敗しました",
       errorMessage,
+    });
+    await addLog({
+      severity: "error",
+      source: "observation-analysis",
+      message: errorMessage,
+      observationId,
+      jobId: job.id,
     });
     return;
   }
@@ -64,6 +80,13 @@ export async function startObservationAnalysis(observationId: string) {
         label: "解析を停止しました",
         errorMessage: "解析を停止しました。",
       });
+      await addLog({
+        severity: "warning",
+        source: "observation-analysis",
+        message: "解析を停止しました。",
+        observationId,
+        jobId: job.id,
+      });
       return;
     }
 
@@ -79,8 +102,15 @@ export async function startObservationAnalysis(observationId: string) {
       if (updatedObservation) {
         try {
           await attachPlantToObservationIfPossible(updatedObservation);
-        } catch {
+        } catch (error) {
           // 観察解析自体は成功しているので、図鑑生成失敗で観察状態までは巻き戻さない。
+          await addLog({
+            severity: "warning",
+            source: "plant-generation",
+            message: error instanceof Error ? error.message : "観察からの図鑑生成に失敗しました。",
+            observationId,
+            jobId: job.id,
+          });
         }
       }
     }
@@ -89,6 +119,14 @@ export async function startObservationAnalysis(observationId: string) {
       percent: 100,
       label: "解析が完了しました",
       errorMessage: null,
+    });
+    await addLog({
+      severity: status === "needs_review" ? "warning" : "info",
+      source: "observation-analysis",
+      message: status === "needs_review" ? "観察解析は確認待ちで完了しました。" : "観察解析が完了しました。",
+      observationId,
+      jobId: job.id,
+      details: { confidence: result.confidence, candidates: result.candidates.length },
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "解析に失敗しました。";
@@ -101,6 +139,13 @@ export async function startObservationAnalysis(observationId: string) {
       percent: 100,
       label: "解析に失敗しました",
       errorMessage,
+    });
+    await addLog({
+      severity: "error",
+      source: "observation-analysis",
+      message: errorMessage,
+      observationId,
+      jobId: job.id,
     });
   }
 }
@@ -125,5 +170,12 @@ export async function requestStopObservationAnalysis(observationId: string) {
   await setObservationStatus(observationId, {
     status: "analysis_failed",
     errorMessage: "解析を停止しました。",
+  });
+  await addLog({
+    severity: "warning",
+    source: "observation-analysis",
+    message: "観察解析の停止を要求しました。",
+    observationId,
+    jobId: job?.id ?? null,
   });
 }

@@ -20,6 +20,7 @@ import {
   getObservation,
   setObservationStatus,
 } from "../../../storage/repositories/observationsRepository";
+import { addLog } from "../../../storage/repositories/logsRepository";
 import type { Observation } from "../../../types/domain";
 import type { ObservationAnalysisResult } from "../../../services/ai/geminiClient";
 
@@ -144,6 +145,14 @@ export async function startManualPlantGeneration(plantId: string) {
     profileGenerationUpdatedAt: new Date().toISOString(),
     profileGenerationErrorMessage: null,
   });
+  await addLog({
+    severity: "info",
+    source: "plant-generation",
+    message: "図鑑生成を開始しました。",
+    plantId,
+    jobId: job.id,
+    details: { model: settings.model, commonNameJa: plant.commonNameJa ?? plant.displayName },
+  });
 
   try {
     const result = await generatePlantProfileWithGemini(
@@ -161,6 +170,13 @@ export async function startManualPlantGeneration(plantId: string) {
         label: "図鑑生成を停止しました",
         percent: 100,
         errorMessage: "図鑑生成を停止しました。",
+      });
+      await addLog({
+        severity: "warning",
+        source: "plant-generation",
+        message: "図鑑生成を停止しました。",
+        plantId,
+        jobId: job.id,
       });
       return;
     }
@@ -200,6 +216,14 @@ export async function startManualPlantGeneration(plantId: string) {
       percent: 100,
       errorMessage: null,
     });
+    await addLog({
+      severity: "info",
+      source: "plant-generation",
+      message: "図鑑生成が完了しました。",
+      plantId: saved.id,
+      jobId: job.id,
+      details: { seconds: result.generationSeconds },
+    });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "図鑑生成に失敗しました。";
     await markPlantGenerationFailed(plantId, errorMessage);
@@ -208,6 +232,13 @@ export async function startManualPlantGeneration(plantId: string) {
       label: "図鑑生成に失敗しました",
       percent: 100,
       errorMessage,
+    });
+    await addLog({
+      severity: "error",
+      source: "plant-generation",
+      message: errorMessage,
+      plantId,
+      jobId: job.id,
     });
   }
 }
@@ -254,6 +285,14 @@ export async function buildPlantFromObservation(observationId: string) {
   await setObservationStatus(observation.id, {
     plantId: plant.id,
   });
+  await addLog({
+    severity: "info",
+    source: "plant-generation",
+    message: "観察から図鑑を生成しました。",
+    observationId: observation.id,
+    plantId: plant.id,
+    details: { seconds: result.generationSeconds },
+  });
 
   return plant;
 }
@@ -288,6 +327,13 @@ export async function requestStopPlantGeneration(plantId: string) {
   }
 
   await markPlantGenerationFailed(plantId, "図鑑生成を停止しました。");
+  await addLog({
+    severity: "warning",
+    source: "plant-generation",
+    message: "図鑑生成の停止を要求しました。",
+    plantId,
+    jobId: job?.id ?? null,
+  });
 }
 
 export async function attachPlantToObservationIfPossible(observation: Observation) {
@@ -304,4 +350,10 @@ export async function deletePlantWithRelations(plantId: string) {
     await deleteJob(job.id);
   }
   await deletePlantRecord(plantId);
+  await addLog({
+    severity: "info",
+    source: "plant-generation",
+    message: "図鑑を削除しました。",
+    plantId,
+  });
 }

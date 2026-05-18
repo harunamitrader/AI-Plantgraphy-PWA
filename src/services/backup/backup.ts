@@ -1,7 +1,7 @@
 import JSZip from "jszip";
 import { useSettingsStore } from "../../features/settings/store/useSettingsStore";
 import { getAppDb, STORE_NAMES, type ImageAsset } from "../../storage/db/appDb";
-import type { AnalysisJob, AppSettings, Observation, Plant } from "../../types/domain";
+import type { AnalysisJob, AppLog, AppSettings, Observation, Plant } from "../../types/domain";
 
 const EXPORT_FORMAT = "ai-plantgraphy-pwa-export";
 const EXPORT_VERSION = 1;
@@ -16,6 +16,7 @@ type BackupManifest = {
     plants: number;
     jobs: number;
     images: number;
+    logs?: number;
   };
 };
 
@@ -25,6 +26,7 @@ type ExportBundle = {
   observations: Array<Observation & { schemaVersion: 1 }>;
   plants: Array<Plant & { schemaVersion: 1; aliases: string[]; representativeImageId: string | null }>;
   jobs: Array<AnalysisJob & { schemaVersion: 1 }>;
+  logs: Array<AppLog & { schemaVersion: 1 }>;
   images: ImageAsset[];
 };
 
@@ -41,23 +43,25 @@ export async function getBackupSummary() {
   const database = await getAppDb();
   const settings = useSettingsStore.getState();
   const settingsCount = hasSettings(settings) ? 1 : 0;
-  const [observations, plants, jobs, images] = await Promise.all([
+  const [observations, plants, jobs, images, logs] = await Promise.all([
     database.count(STORE_NAMES.observations),
     database.count(STORE_NAMES.plants),
     database.count(STORE_NAMES.jobs),
     database.count(STORE_NAMES.images),
+    database.count(STORE_NAMES.logs),
   ]);
 
-  return { settings: settingsCount, observations, plants, jobs, images };
+  return { settings: settingsCount, observations, plants, jobs, images, logs };
 }
 
 async function readBackupBundle(): Promise<ExportBundle> {
   const settings = useSettingsStore.getState();
-  const [observations, plants, jobs, images] = await Promise.all([
+  const [observations, plants, jobs, images, logs] = await Promise.all([
     readStore<ExportBundle["observations"][number]>(STORE_NAMES.observations),
     readStore<ExportBundle["plants"][number]>(STORE_NAMES.plants),
     readStore<ExportBundle["jobs"][number]>(STORE_NAMES.jobs),
     readStore<ImageAsset>(STORE_NAMES.images),
+    readStore<ExportBundle["logs"][number]>(STORE_NAMES.logs),
   ]);
 
   return {
@@ -71,12 +75,14 @@ async function readBackupBundle(): Promise<ExportBundle> {
         plants: plants.length,
         jobs: jobs.length,
         images: images.length,
+        logs: logs.length,
       },
     },
     settings: [settings],
     observations,
     plants,
     jobs,
+    logs,
     images,
   };
 }
@@ -91,6 +97,7 @@ export async function createBackupZip() {
   zip.file("data/observations.json", JSON.stringify(bundle.observations, null, 2), jsonOptions);
   zip.file("data/plants.json", JSON.stringify(bundle.plants, null, 2), jsonOptions);
   zip.file("data/jobs.json", JSON.stringify(bundle.jobs, null, 2), jsonOptions);
+  zip.file("data/logs.json", JSON.stringify(bundle.logs, null, 2), jsonOptions);
 
   for (const image of bundle.images) {
     const { blob, ...metadata } = image;
@@ -118,22 +125,25 @@ export async function importBackupZip(file: File) {
     throw new Error("対応していないバックアップ形式です。");
   }
 
-  const [settingsJson, observationsJson, plantsJson, jobsJson] = await Promise.all([
+  const [settingsJson, observationsJson, plantsJson, jobsJson, logsJson] = await Promise.all([
     zip.file("data/settings.json")?.async("string"),
     zip.file("data/observations.json")?.async("string"),
     zip.file("data/plants.json")?.async("string"),
     zip.file("data/jobs.json")?.async("string"),
+    zip.file("data/logs.json")?.async("string"),
   ]);
 
   const settings = JSON.parse(settingsJson ?? "[]") as AppSettings[];
   const observations = JSON.parse(observationsJson ?? "[]") as ExportBundle["observations"];
   const plants = JSON.parse(plantsJson ?? "[]") as ExportBundle["plants"];
   const jobs = JSON.parse(jobsJson ?? "[]") as ExportBundle["jobs"];
+  const logs = JSON.parse(logsJson ?? "[]") as ExportBundle["logs"];
 
   await Promise.all([
     clearStore(STORE_NAMES.observations),
     clearStore(STORE_NAMES.plants),
     clearStore(STORE_NAMES.jobs),
+    clearStore(STORE_NAMES.logs),
     clearStore(STORE_NAMES.images),
   ]);
 
@@ -142,6 +152,7 @@ export async function importBackupZip(file: File) {
     ...observations.map((record) => database.put(STORE_NAMES.observations, record)),
     ...plants.map((record) => database.put(STORE_NAMES.plants, record)),
     ...jobs.map((record) => database.put(STORE_NAMES.jobs, record)),
+    ...logs.map((record) => database.put(STORE_NAMES.logs, record)),
   ]);
 
   if (settings[0]) {

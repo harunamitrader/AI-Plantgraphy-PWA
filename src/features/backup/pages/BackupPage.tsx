@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { appDbStatusText } from "../../../storage/db/appDb";
 import { createBackupZip, getBackupSummary, importBackupZip } from "../../../services/backup/backup";
+import { addLog } from "../../../storage/repositories/logsRepository";
 import {
   formatBytes,
   getDiagnosticsSummary,
@@ -23,6 +24,7 @@ export function BackupPage() {
     plants: 0,
     jobs: 0,
     images: 0,
+    logs: 0,
   });
   const [diagnostics, setDiagnostics] = useState<DiagnosticsSummary | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -52,9 +54,23 @@ export function BackupPage() {
     try {
       const blob = await createBackupZip();
       downloadBlob(blob, `ai-plantgraphy-pwa-backup-${new Date().toISOString().slice(0, 10)}.zip`);
+      await addLog({
+        severity: "info",
+        source: "backup",
+        message: "バックアップを書き出しました。",
+        details: { bytes: blob.size },
+      });
+      setSummary(await getBackupSummary());
+      setDiagnostics(await getDiagnosticsSummary());
       setNotice("バックアップを書き出しました。");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "バックアップの書き出しに失敗しました。");
+      const message = error instanceof Error ? error.message : "バックアップの書き出しに失敗しました。";
+      await addLog({
+        severity: "error",
+        source: "backup",
+        message,
+      });
+      setNotice(message);
     } finally {
       setBusy(false);
     }
@@ -68,13 +84,26 @@ export function BackupPage() {
 
     setBusy(true);
     try {
-      await importBackupZip(file);
+      const manifest = await importBackupZip(file);
+      await addLog({
+        severity: "info",
+        source: "backup",
+        message: "バックアップを復元しました。",
+        details: { fileName: file.name, counts: manifest.counts },
+      });
       const next = await getBackupSummary();
       setSummary(next);
       setDiagnostics(await getDiagnosticsSummary());
       setNotice("バックアップを復元しました。");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "バックアップの復元に失敗しました。");
+      const message = error instanceof Error ? error.message : "バックアップの復元に失敗しました。";
+      await addLog({
+        severity: "error",
+        source: "backup",
+        message,
+        details: { fileName: file.name },
+      });
+      setNotice(message);
     } finally {
       setBusy(false);
       event.target.value = "";
@@ -129,6 +158,10 @@ export function BackupPage() {
           <article className="placeholder-card">
             <p className="eyebrow">Images</p>
             <h3>{summary.images}件</h3>
+          </article>
+          <article className="placeholder-card">
+            <p className="eyebrow">Logs</p>
+            <h3>{summary.logs}件</h3>
           </article>
         </div>
         <div className="status-grid">

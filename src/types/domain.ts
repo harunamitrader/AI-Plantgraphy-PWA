@@ -49,6 +49,27 @@ export type AnalysisJob = {
   errorMessage: string | null;
 };
 
+export type AppLogSeverity = "info" | "warning" | "error";
+
+export type AppLogSource =
+  | "observation-analysis"
+  | "plant-generation"
+  | "backup"
+  | "settings"
+  | "system";
+
+export type AppLog = {
+  id: string;
+  severity: AppLogSeverity;
+  source: AppLogSource;
+  message: string;
+  observationId: string | null;
+  plantId: string | null;
+  jobId: string | null;
+  details: unknown | null;
+  createdAt: string;
+};
+
 export type Observation = {
   id: string;
   plantId: string | null;

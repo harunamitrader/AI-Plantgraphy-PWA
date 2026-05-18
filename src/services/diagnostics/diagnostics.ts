@@ -22,6 +22,7 @@ export type DiagnosticsSummary = {
     observationCount: number;
     plantCount: number;
     jobCount: number;
+    logCount: number;
   };
   backup: {
     exportableRecords: number;
@@ -74,6 +75,7 @@ export async function getDiagnosticsSummary(): Promise<DiagnosticsSummary> {
       observationCount: backupSummary.observations,
       plantCount: backupSummary.plants,
       jobCount: backupSummary.jobs,
+      logCount: backupSummary.logs,
     },
     backup: {
       exportableRecords:
@@ -81,7 +83,8 @@ export async function getDiagnosticsSummary(): Promise<DiagnosticsSummary> {
         backupSummary.observations +
         backupSummary.plants +
         backupSummary.jobs +
-        backupSummary.images,
+        backupSummary.images +
+        backupSummary.logs,
       lastCheckedAt: new Date().toISOString(),
     },
   };
