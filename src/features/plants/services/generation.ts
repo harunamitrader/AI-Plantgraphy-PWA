@@ -23,32 +23,66 @@ import {
 import type { Observation } from "../../../types/domain";
 import type { ObservationAnalysisResult } from "../../../services/ai/geminiClient";
 
+function toText(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function collectTexts(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap(collectTexts);
+  }
+  if (value && typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).flatMap(collectTexts);
+  }
+  const text = toText(value);
+  return text ? [text] : [];
+}
+
 function normalizeObservationResult(value: unknown): ObservationAnalysisResult | null {
   if (!value || typeof value !== "object") {
     return null;
   }
 
   const record = value as Record<string, unknown>;
+  const identification =
+    record.plant_identification && typeof record.plant_identification === "object"
+      ? (record.plant_identification as Record<string, unknown>)
+      : record.plantIdentification && typeof record.plantIdentification === "object"
+        ? (record.plantIdentification as Record<string, unknown>)
+        : record;
+  const observationDetails =
+    record.observation_details && typeof record.observation_details === "object"
+      ? (record.observation_details as Record<string, unknown>)
+      : record.observationDetails && typeof record.observationDetails === "object"
+        ? (record.observationDetails as Record<string, unknown>)
+        : {};
   const commonNameJa =
-    typeof record.commonNameJa === "string"
-      ? record.commonNameJa
-      : typeof record.common_name === "string"
-        ? record.common_name
-        : null;
+    toText(record.commonNameJa) ??
+    toText(record.common_name_ja) ??
+    toText(record.common_name) ??
+    toText(record.plant_name) ??
+    toText(identification.commonNameJa) ??
+    toText(identification.common_name_ja) ??
+    toText(identification.common_name) ??
+    toText(identification.plant_name);
   if (!commonNameJa) {
     return null;
   }
 
   return {
     commonNameJa,
-    scientificName: typeof record.scientificName === "string" ? record.scientificName : null,
+    scientificName:
+      toText(record.scientificName) ??
+      toText(record.scientific_name) ??
+      toText(identification.scientificName) ??
+      toText(identification.scientific_name),
     confidence: typeof record.confidence === "number" ? record.confidence : null,
     candidates: Array.isArray(record.candidates) ? (record.candidates as ObservationAnalysisResult["candidates"]) : [],
     visibleFeatures: Array.isArray(record.visibleFeatures)
       ? record.visibleFeatures.filter((item): item is string => typeof item === "string")
       : Array.isArray(record.visible_features)
         ? record.visible_features.filter((item): item is string => typeof item === "string")
-        : [],
+        : collectTexts(record.characteristics ?? observationDetails.characteristics),
     uncertaintyNotes:
       typeof record.uncertaintyNotes === "string"
         ? record.uncertaintyNotes

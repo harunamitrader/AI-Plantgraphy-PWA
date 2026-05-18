@@ -30,6 +30,18 @@ function toStringOrNull(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function textFromUnknown(value: unknown): string | null {
+  if (Array.isArray(value)) {
+    const text = value.map(textFromUnknown).filter(Boolean).join(" ");
+    return text.trim() ? text.trim() : null;
+  }
+  if (value && typeof value === "object") {
+    const text = Object.values(value as Record<string, unknown>).map(textFromUnknown).filter(Boolean).join(" ");
+    return text.trim() ? text.trim() : null;
+  }
+  return toStringOrNull(value);
+}
+
 function extractJson(text: string) {
   const trimmed = text.trim();
   const start = trimmed.indexOf("{");
@@ -55,30 +67,51 @@ async function parseGeminiText(response: Response) {
   return JSON.parse(extractJson(text)) as Record<string, unknown>;
 }
 
-function normalizePlantProfile(raw: Record<string, unknown>, model: string, generationSeconds: number) {
+function normalizePlantProfile(
+  raw: Record<string, unknown>,
+  model: string,
+  generationSeconds: number,
+  fallbackName: string,
+) {
+  const profile =
+    raw.profile && typeof raw.profile === "object"
+      ? (raw.profile as Record<string, unknown>)
+      : raw.plant_profile && typeof raw.plant_profile === "object"
+        ? (raw.plant_profile as Record<string, unknown>)
+        : raw;
   const commonNameJa =
-    toStringOrNull(raw.common_name_ja) ??
-    toStringOrNull(raw.common_name) ??
-    toStringOrNull(raw.commonNameJa) ??
-    "";
+    toStringOrNull(profile.common_name_ja) ??
+    toStringOrNull(profile.common_name) ??
+    toStringOrNull(profile.commonNameJa) ??
+    toStringOrNull(profile.plant_name) ??
+    fallbackName;
   const scientificName =
-    toStringOrNull(raw.scientific_name) ??
-    toStringOrNull(raw.scientificName) ??
+    toStringOrNull(profile.scientific_name) ??
+    toStringOrNull(profile.scientificName) ??
     null;
 
   return {
     commonNameJa,
     scientificName,
     basicProfileText:
-      toStringOrNull(raw.basic_profile_text) ?? toStringOrNull(raw.basicProfileText) ?? "",
+      textFromUnknown(profile.basic_profile_text ?? profile.basicProfileText ?? profile.characteristics) ?? "",
     visualAppealText:
-      toStringOrNull(raw.visual_appeal_text) ?? toStringOrNull(raw.visualAppealText) ?? "",
-    careNotes: toStringOrNull(raw.care_notes) ?? toStringOrNull(raw.careNotes) ?? "",
+      textFromUnknown(profile.visual_appeal_text ?? profile.visualAppealText ?? profile.appearance) ?? "",
+    careNotes: textFromUnknown(profile.care_notes ?? profile.careNotes ?? profile.care_advice) ?? "",
     uncertaintyNotes:
-      toStringOrNull(raw.uncertainty_notes) ?? toStringOrNull(raw.uncertaintyNotes) ?? "",
+      textFromUnknown(profile.uncertainty_notes ?? profile.uncertaintyNotes) ?? "",
     geminiModel: model,
     generationSeconds,
   } satisfies PlantProfileResult;
+}
+
+function isUsablePlantProfile(result: PlantProfileResult) {
+  return Boolean(
+    result.commonNameJa.trim() &&
+      result.basicProfileText.trim() &&
+      result.visualAppealText.trim() &&
+      result.careNotes.trim(),
+  );
 }
 
 export async function generatePlantProfileWithGemini(
@@ -96,55 +129,73 @@ export async function generatePlantProfileWithGemini(
       : "不明";
   const observationNote = input.observationNote?.trim() || "なし";
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(settings.model)}:generateContent?key=${encodeURIComponent(settings.apiKey)}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [
-            {
-              text:
-                "あなたは植物図鑑の補助をするアシスタントです。返答は JSON のみ。曖昧なら scientific_name は null にしてください。",
-            },
-          ],
+  async function requestJson(prompt: string) {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(settings.model)}:generateContent?key=${encodeURIComponent(settings.apiKey)}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-        contents: [
-          {
-            role: "user",
+        body: JSON.stringify({
+          systemInstruction: {
             parts: [
               {
                 text:
-                  "植物名から図鑑本文を作成してください。トップレベルキーは common_name_ja, scientific_name, basic_profile_text, visual_appeal_text, care_notes, uncertainty_notes です。追加説明は禁止です。",
-              },
-              {
-                text: `和名: ${input.commonNameJa}\n学名: ${input.scientificName ?? "未指定"}\n見えている特徴: ${visibleFeaturesText}\n観察メモ: ${observationNote}`,
+                  "あなたは植物図鑑の補助をするアシスタントです。返答は JSON のみ。曖昧なら scientific_name は null にしてください。",
               },
             ],
           },
-        ],
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 1536,
-          responseMimeType: "application/json",
-        },
-      }),
-    },
-  );
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  text: prompt,
+                },
+                {
+                  text: `和名: ${input.commonNameJa}\n学名: ${input.scientificName ?? "未指定"}\n見えている特徴: ${visibleFeaturesText}\n観察メモ: ${observationNote}`,
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 1536,
+            responseMimeType: "application/json",
+          },
+        }),
+      },
+    );
 
-  if (!response.ok) {
-    throw new Error(`Gemini API エラー: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`Gemini API エラー: ${response.status}`);
+    }
+
+    return parseGeminiText(response);
   }
 
-  const raw = await parseGeminiText(response);
-  const result = normalizePlantProfile(
-    raw,
-    settings.model,
-    Math.max(0, Math.round((performance.now() - startedAt) / 1000)),
-  );
+  const primaryPrompt =
+    "植物名から図鑑本文を作成してください。トップレベルキーは common_name_ja, scientific_name, basic_profile_text, visual_appeal_text, care_notes, uncertainty_notes です。追加説明は禁止です。";
+  const retryPrompt =
+    "JSONだけ返してください。必須キー: common_name_ja, scientific_name, basic_profile_text, visual_appeal_text, care_notes, uncertainty_notes。basic_profile_text, visual_appeal_text, care_notes は必ず1文以上の日本語文字列にしてください。";
+  const generationSeconds = () => Math.max(0, Math.round((performance.now() - startedAt) / 1000));
+  let raw: Record<string, unknown>;
+  let result: PlantProfileResult;
+
+  try {
+    raw = await requestJson(primaryPrompt);
+    result = normalizePlantProfile(raw, settings.model, generationSeconds(), input.commonNameJa);
+    if (!isUsablePlantProfile(result)) {
+      throw new Error("図鑑生成結果に空の項目があります。");
+    }
+  } catch (error) {
+    raw = await requestJson(retryPrompt);
+    result = normalizePlantProfile(raw, settings.model, generationSeconds(), input.commonNameJa);
+    if (!isUsablePlantProfile(result)) {
+      throw error instanceof Error ? error : new Error("図鑑生成結果の正規化に失敗しました。");
+    }
+  }
 
   if (!result.commonNameJa) {
     throw new Error("図鑑生成結果に植物名が含まれていません。");

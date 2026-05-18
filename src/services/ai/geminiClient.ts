@@ -67,7 +67,34 @@ function toStringOrNull(value: unknown) {
 }
 
 function toNumberOrNull(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.replace("%", "").trim());
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeConfidence(value: unknown) {
+  const number = toNumberOrNull(value);
+  if (number === null) {
+    return null;
+  }
+  const normalized = number > 1 && number <= 100 ? number / 100 : number;
+  return Math.min(1, Math.max(0, normalized));
+}
+
+function collectStrings(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap(collectStrings);
+  }
+  if (value && typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).flatMap(collectStrings);
+  }
+  const text = toStringOrNull(value);
+  return text ? [text] : [];
 }
 
 function normalizeCandidate(candidate: unknown): ObservationAnalysisCandidate | null {
@@ -76,20 +103,19 @@ function normalizeCandidate(candidate: unknown): ObservationAnalysisCandidate | 
   }
 
   const item = candidate as Record<string, unknown>;
-  const confidence = toNumberOrNull(item.confidence);
-  const reason = toStringOrNull(item.reason);
-  if (confidence === null || reason === null) {
+  const commonNameJa = toStringOrNull(
+    item.commonNameJa ?? item.common_name_ja ?? item.common_name ?? item.plant_name ?? item.name,
+  );
+  const scientificName = toStringOrNull(item.scientificName ?? item.scientific_name);
+  if (!commonNameJa && !scientificName) {
     return null;
   }
-
-  const commonNameJa = toStringOrNull(item.commonNameJa ?? item.common_name ?? item.common_name_ja);
-  const scientificName = toStringOrNull(item.scientificName ?? item.scientific_name ?? item.scientificNameJa);
 
   return {
     commonNameJa,
     scientificName,
-    confidence,
-    reason,
+    confidence: normalizeConfidence(item.confidence) ?? 0.5,
+    reason: toStringOrNull(item.reason) ?? "候補として返されました。",
   };
 }
 
@@ -109,6 +135,8 @@ function normalizeResult(raw: unknown): ObservationAnalysisResult {
         : null;
   const characteristics = Array.isArray(observationDetails?.characteristics)
     ? observationDetails.characteristics
+    : observationDetails?.characteristics
+      ? collectStrings(observationDetails.characteristics)
     : [];
 
   const candidates = [root.candidates, root.ai_candidates, identification.candidates]
@@ -118,17 +146,30 @@ function normalizeResult(raw: unknown): ObservationAnalysisResult {
 
   const visibleFeatures = Array.isArray(root.visible_features)
     ? root.visible_features
-    : Array.isArray(identification.visible_features)
+    : Array.isArray(root.visibleFeatures)
+      ? root.visibleFeatures
+      : Array.isArray(identification.visible_features)
       ? identification.visible_features
-      : characteristics;
+      : Array.isArray(identification.visibleFeatures)
+        ? identification.visibleFeatures
+        : collectStrings(root.characteristics).length > 0
+          ? collectStrings(root.characteristics)
+          : characteristics;
 
-  const confidence = toNumberOrNull(root.confidence ?? identification.confidence);
+  const confidence = normalizeConfidence(root.confidence ?? identification.confidence);
   const basicProfileText = toStringOrNull(root.basic_profile_text ?? root.basicProfileText) ?? "";
   const visualAppealText = toStringOrNull(root.visual_appeal_text ?? root.visualAppealText) ?? "";
   const careNotes = toStringOrNull(root.care_notes ?? root.careNotes) ?? "";
   const uncertaintyNotes = toStringOrNull(root.uncertainty_notes ?? root.uncertaintyNotes) ?? "";
   const commonNameJa = toStringOrNull(
-    root.common_name ?? root.commonNameJa ?? identification.common_name ?? identification.commonNameJa,
+    root.common_name_ja ??
+      root.common_name ??
+      root.commonNameJa ??
+      root.plant_name ??
+      identification.common_name_ja ??
+      identification.common_name ??
+      identification.commonNameJa ??
+      identification.plant_name,
   );
   const scientificName = toStringOrNull(
     root.scientific_name ??
@@ -151,7 +192,17 @@ function normalizeResult(raw: unknown): ObservationAnalysisResult {
     commonNameJa,
     scientificName,
     confidence,
-    candidates,
+    candidates:
+      candidates.length > 0 || !commonNameJa
+        ? candidates
+        : [
+            {
+              commonNameJa,
+              scientificName,
+              confidence: confidence ?? 0.68,
+              reason: "解析結果で植物名が返されました。",
+            },
+          ],
     visibleFeatures: visibleFeatures
       .map((item: unknown) => toStringOrNull(item))
       .filter((item: string | null): item is string => Boolean(item)),
@@ -166,6 +217,15 @@ function normalizeResult(raw: unknown): ObservationAnalysisResult {
       totalSeconds,
     },
   };
+}
+
+function hasUsableObservationResult(result: ObservationAnalysisResult) {
+  return Boolean(
+    result.commonNameJa ||
+      result.scientificName ||
+      result.candidates.length > 0 ||
+      result.visibleFeatures.length > 0,
+  );
 }
 
 async function parseGeminiText(response: Response) {
@@ -197,19 +257,10 @@ export async function analyzeObservationWithGemini(
   }
 
   const startedAt = performance.now();
-  const parts: GeminiApiPart[] = [
-    {
-      text:
-        "植物の観察画像を解析して、必ず JSON だけを返してください。トップレベルキーは common_name, scientific_name, confidence, candidates, visible_features, uncertainty_notes, basic_profile_text, visual_appeal_text, care_notes です。追加説明やコードブロックは不要です。",
-    },
-    {
-      text: `観察メモ: ${observation.note || "なし"}\n場所: ${observation.locationLabel || "未設定"}\n撮影日: ${observation.capturedAt ?? "未設定"}`,
-    },
-  ];
-
+  const imageParts: GeminiApiPart[] = [];
   for (const image of imageRecords) {
     const buffer = await image.blob.arrayBuffer();
-    parts.push({
+    imageParts.push({
       inlineData: {
         mimeType: image.mimeType,
         data: toBase64(buffer),
@@ -217,7 +268,28 @@ export async function analyzeObservationWithGemini(
     });
   }
 
-  const response = await fetch(
+  const contextText = `観察メモ: ${observation.note || "なし"}\n場所: ${observation.locationLabel || "未設定"}\n撮影日: ${observation.capturedAt ?? "未設定"}`;
+  const primaryParts: GeminiApiPart[] = [
+    {
+      text:
+        "植物の観察画像を解析して、必ず JSON だけを返してください。トップレベルキーは common_name, scientific_name, confidence, candidates, visible_features, uncertainty_notes, basic_profile_text, visual_appeal_text, care_notes です。追加説明やコードブロックは不要です。",
+    },
+    {
+      text: contextText,
+    },
+    ...imageParts,
+  ];
+  const retryParts: GeminiApiPart[] = [
+    {
+      text:
+        "画像の植物を判定し、JSONだけ返してください。必須キー: common_name, scientific_name, confidence, candidates, visible_features, uncertainty_notes。分からない値は null または空配列にしてください。",
+    },
+    { text: contextText },
+    ...imageParts,
+  ];
+
+  async function requestJson(parts: GeminiApiPart[]) {
+    const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(settings.model)}:generateContent?key=${encodeURIComponent(settings.apiKey)}`,
     {
       method: "POST",
@@ -248,12 +320,28 @@ export async function analyzeObservationWithGemini(
     },
   );
 
-  if (!response.ok) {
-    throw new Error(`Gemini API エラー: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`Gemini API エラー: ${response.status}`);
+    }
+
+    return parseGeminiText(response);
   }
 
-  const raw = await parseGeminiText(response);
-  const normalized = normalizeResult(raw);
+  let raw: unknown;
+  let normalized: ObservationAnalysisResult;
+  try {
+    raw = await requestJson(primaryParts);
+    normalized = normalizeResult(raw);
+    if (!hasUsableObservationResult(normalized)) {
+      throw new Error("解析結果に植物名・候補・特徴が含まれていません。");
+    }
+  } catch (error) {
+    raw = await requestJson(retryParts);
+    normalized = normalizeResult(raw);
+    if (!hasUsableObservationResult(normalized)) {
+      throw error instanceof Error ? error : new Error("観察解析結果の正規化に失敗しました。");
+    }
+  }
   normalized.analysisTiming.totalSeconds = Math.max(
     0,
     Math.round((performance.now() - startedAt) / 1000),
