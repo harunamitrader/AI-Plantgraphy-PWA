@@ -84,8 +84,7 @@ export function SettingsPage() {
         <p className="eyebrow">Settings</p>
         <h2>API キーと基本設定</h2>
         <p>
-          初期実装では API キーとモデルをローカルに保存します。観察や図鑑の本保存先は次の段階で
-          IndexedDB に切り替えます。
+          API キー、モデル、場所ラベル、観察、図鑑、画像、ログはこの端末内に保存します。
         </p>
         <p className="status-copy">
           {runtime.aiBlockedReason ?? "現在はオンラインで、AI 機能をそのまま使えます。"}

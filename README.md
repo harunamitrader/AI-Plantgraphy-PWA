@@ -16,6 +16,7 @@ AI-Plantgraphy PWA は、植物観察と植物図鑑を `PWA` として提供す
 - 仕様書: [docs/SPECIFICATION.md](docs/SPECIFICATION.md)
 - アーキテクチャ: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - テスト計画: [docs/TEST-PLAN.md](docs/TEST-PLAN.md)
+- 実機確認チェックリスト: [docs/REAL-DEVICE-CHECKLIST.md](docs/REAL-DEVICE-CHECKLIST.md)
 - 実装計画: [docs/IMPLEMENTATION-PLAN.md](docs/IMPLEMENTATION-PLAN.md)
 - データモデル: [docs/DATA-MODEL.md](docs/DATA-MODEL.md)
 - 画面ワイヤー: [docs/UI-WIREFRAME.md](docs/UI-WIREFRAME.md)
@@ -41,6 +42,9 @@ AI-Plantgraphy PWA は、植物観察と植物図鑑を `PWA` として提供す
 - 図鑑削除
 - 確認待ちハブ
 - エクスポート / インポート
+- 診断表示
+- 永続ログ表示
+- 旧版データ移行スクリプト
 - オフライン時 / API キー未設定時の安全な案内
 
 ## 技術方針
