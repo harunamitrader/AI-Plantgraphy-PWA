@@ -3,9 +3,10 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useRuntimeStatus } from "../../../app/hooks/useRuntimeStatus";
 import { formatElapsedSeconds } from "../../../app/utils/time";
 import { loadImageAsset } from "../../../storage/repositories/imagesRepository";
+import { loadJobByPlantId } from "../../../storage/repositories/jobsRepository";
 import { loadObservationImages, loadObservationsByPlantId } from "../../../storage/repositories/observationsRepository";
 import { getPlant } from "../../../storage/repositories/plantsRepository";
-import type { Observation, Plant } from "../../../types/domain";
+import type { AnalysisJob, Observation, Plant } from "../../../types/domain";
 import { deletePlantWithRelations, requestStopPlantGeneration, startManualPlantGeneration } from "../services/generation";
 
 type RelatedPhoto = {
@@ -29,11 +30,47 @@ function formatConfidence(confidence: number | null) {
   return confidence === null ? "信頼度 不明" : `信頼度 ${Math.round(confidence * 100)}%`;
 }
 
+function getPlantProgressCopy(plant: Plant, job: AnalysisJob | null) {
+  if (plant.profileGenerationStatus === "queued") {
+    return {
+      badge: "生成待ち",
+      title: "図鑑生成を開始しました",
+      description: "AIが入力情報を受け取り、図鑑本文を作る準備をしています。",
+    };
+  }
+  if (plant.profileGenerationStatus === "analyzing") {
+    return {
+      badge: "生成中",
+      title: "AIが図鑑を生成しています",
+      description: "植物名、特徴、観察メモをもとに、図鑑本文を組み立てています。",
+    };
+  }
+  if (plant.profileGenerationStatus === "analysis_failed") {
+    return {
+      badge: "生成失敗",
+      title:
+        plant.profileGenerationErrorMessage?.includes("停止") || job?.errorMessage?.includes("停止")
+          ? "図鑑生成を停止しました"
+          : "図鑑生成は完了できませんでした",
+      description:
+        plant.profileGenerationErrorMessage ??
+        job?.errorMessage ??
+        "AI応答や入力情報を確認してから再生成してください。",
+    };
+  }
+  return {
+    badge: "生成完了",
+    title: "図鑑生成が完了しました",
+    description: "AIが図鑑本文を保存しました。内容は下の各セクションで確認できます。",
+  };
+}
+
 export function PlantDetailPage() {
   const navigate = useNavigate();
   const runtime = useRuntimeStatus();
   const { plantId } = useParams();
   const [plant, setPlant] = useState<Plant | null>(null);
+  const [job, setJob] = useState<AnalysisJob | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [relatedObservations, setRelatedObservations] = useState<Observation[]>([]);
   const [relatedPhotos, setRelatedPhotos] = useState<RelatedPhoto[]>([]);
@@ -48,9 +85,10 @@ export function PlantDetailPage() {
       if (!plantId) {
         return;
       }
-      const record = await getPlant(plantId);
+      const [record, jobRecord] = await Promise.all([getPlant(plantId), loadJobByPlantId(plantId)]);
       if (mounted) {
         setPlant(record ?? null);
+        setJob(jobRecord ?? null);
       }
     }
 
@@ -66,6 +104,8 @@ export function PlantDetailPage() {
       window.clearInterval(timer);
     };
   }, [plantId]);
+
+  const progress = plant ? getPlantProgressCopy(plant, job) : null;
 
   useEffect(() => {
     let mounted = true;
@@ -202,10 +242,10 @@ export function PlantDetailPage() {
                       return;
                     }
                     setBusy(true);
-                    setNotice("図鑑を再生成しています。");
+                    setNotice("図鑑生成を開始しました。AIが図鑑本文を作っています。");
                     try {
                       await startManualPlantGeneration(plant.id);
-                      setNotice("図鑑再生成を開始しました。");
+                      setNotice("図鑑生成が完了しました。");
                     } catch (error) {
                       setNotice(error instanceof Error ? error.message : "図鑑再生成に失敗しました。");
                     } finally {
@@ -264,6 +304,30 @@ export function PlantDetailPage() {
               </div>
             </article>
           </div>
+
+          {progress ? (
+            <article className="placeholder-card ai-status-card">
+              <p className="eyebrow">AI Status</p>
+              <div className="metric">
+                <div>
+                  <h3>{progress.title}</h3>
+                  <p className="status-copy">{progress.description}</p>
+                </div>
+                <span className="status-badge">{progress.badge}</span>
+              </div>
+              <div className="panel-actions">
+                <span className="card-chip">
+                  {job?.label ?? (plant.profileGenerationStatus === null ? "図鑑生成が完了しました" : "図鑑を生成しています")}
+                </span>
+                <span className="card-chip">
+                  経過{" "}
+                  {formatElapsedSeconds(plant.profileGenerationStartedAt, now, getPlantElapsedEnd(plant)) ??
+                    "時間なし"}
+                </span>
+              </div>
+            </article>
+          ) : null}
+
           {notice ? <p className="status-copy">{notice}</p> : null}
 
           <article className="placeholder-card">

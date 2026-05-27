@@ -319,7 +319,7 @@ export function UploadPage() {
             type="submit"
             disabled={busy || candidates.filter((candidate) => candidate.selected).length === 0}
           >
-            {busy ? "保存中..." : "観察を保存する"}
+            {busy ? "解析を開始中..." : "解析する"}
           </button>
         </div>
       </form>

@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useRuntimeStatus } from "../../../app/hooks/useRuntimeStatus";
 import { formatElapsedSeconds } from "../../../app/utils/time";
+import { loadJobByObservationId } from "../../../storage/repositories/jobsRepository";
 import {
   deleteObservation,
   getObservation,
   loadObservationImages,
   updateObservationManualCorrection,
 } from "../../../storage/repositories/observationsRepository";
-import type { Observation } from "../../../types/domain";
+import type { AnalysisJob, Observation } from "../../../types/domain";
 import { buildPlantFromObservation } from "../../plants/services/generation";
 import { requestStopObservationAnalysis, startObservationAnalysis } from "../services/analysis";
 
@@ -138,11 +139,55 @@ function getObservationElapsedEnd(observation: Observation) {
   return observation.status === "queued" || observation.status === "analyzing" ? null : observation.updatedAt;
 }
 
+function extractDisplayedRawJson(rawResult: unknown | null) {
+  const root = asRecord(rawResult);
+  return root.rawJson ?? root.raw_json ?? rawResult;
+}
+
+function getObservationProgressCopy(observation: Observation) {
+  if (observation.status === "queued") {
+    return {
+      badge: "解析待ち",
+      title: "観察を保存しました",
+      description: "画像とメモを受け付けました。これからAI解析を始めます。",
+    };
+  }
+  if (observation.status === "analyzing") {
+    return {
+      badge: "解析中",
+      title: "AIが観察を解析しています",
+      description: "画像・場所・メモを読み取り、植物候補、特徴、信頼度を整理しています。",
+    };
+  }
+  if (observation.status === "analyzed") {
+    return {
+      badge: "解析完了",
+      title: "観察のAI解析が完了しました",
+      description: observation.plantId
+        ? "解析結果をもとに図鑑も作成済みです。関連図鑑へ進めます。"
+        : "結果を保存しました。必要ならこの観察から図鑑を生成できます。",
+    };
+  }
+  if (observation.status === "needs_review") {
+    return {
+      badge: "確認待ち",
+      title: "AI解析は完了しましたが確認が必要です",
+      description: "候補や特徴は出ていますが確信が低めです。内容を見て手動補正できます。",
+    };
+  }
+  return {
+    badge: "解析失敗",
+    title: observation.errorMessage.includes("停止") ? "AI解析を停止しました" : "AI解析は完了できませんでした",
+    description: observation.errorMessage || "ネットワークやAPI応答を確認してから再解析してください。",
+  };
+}
+
 export function ObservationDetailPage() {
   const navigate = useNavigate();
   const runtime = useRuntimeStatus();
   const { observationId } = useParams();
   const [observation, setObservation] = useState<Observation | null>(null);
+  const [job, setJob] = useState<AnalysisJob | null>(null);
   const [images, setImages] = useState<ObservationImageView[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
@@ -215,9 +260,13 @@ export function ObservationDetailPage() {
         return;
       }
 
-      const record = await getObservation(observationId);
+      const [record, jobRecord] = await Promise.all([
+        getObservation(observationId),
+        loadJobByObservationId(observationId),
+      ]);
       if (mounted) {
         setObservation(record ?? null);
+        setJob(jobRecord ?? null);
         if (record) {
           initializeManualForm(record);
         }
@@ -242,13 +291,22 @@ export function ObservationDetailPage() {
     [images],
   );
   const summary = useMemo(() => normalizeSummary(observation?.rawResult ?? null), [observation?.rawResult]);
+  const progress = observation ? getObservationProgressCopy(observation) : null;
+  const rawJson = useMemo(
+    () => extractDisplayedRawJson(observation?.rawResult ?? null),
+    [observation?.rawResult],
+  );
 
   async function refreshCurrentObservation() {
     if (!observationId) {
       return;
     }
-    const record = await getObservation(observationId);
+    const [record, jobRecord] = await Promise.all([
+      getObservation(observationId),
+      loadJobByObservationId(observationId),
+    ]);
     setObservation(record ?? null);
+    setJob(jobRecord ?? null);
   }
 
   async function handleReanalysis() {
@@ -261,11 +319,11 @@ export function ObservationDetailPage() {
     }
 
     setBusy(true);
-    setNotice("観察を再解析しています。");
+    setNotice("観察解析を開始しました。AIが画像とメモを読み取っています。");
     try {
       await startObservationAnalysis(observation.id);
       await refreshCurrentObservation();
-      setNotice("観察の再解析が完了しました。");
+      setNotice("観察解析が完了しました。");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "観察の再解析に失敗しました。");
     } finally {
@@ -332,13 +390,13 @@ export function ObservationDetailPage() {
     setBusy(true);
     setNotice(
       observation.plantId
-        ? "この観察をもとに図鑑を再生成しています。"
-        : "この観察をもとに図鑑を生成しています。",
+        ? "図鑑生成を開始しました。AIが図鑑本文を作っています。"
+        : "図鑑生成を開始しました。AIが図鑑本文を作っています。",
     );
     try {
       const plant = await buildPlantFromObservation(observation.id);
       if (plant) {
-        setNotice("図鑑を生成しました。");
+        setNotice("図鑑生成が完了しました。");
         navigate(`/plants/${plant.id}`);
       } else {
         setNotice("解析結果から図鑑化できる植物名を取り出せませんでした。");
@@ -396,6 +454,29 @@ export function ObservationDetailPage() {
             </article>
           </div>
 
+          {progress ? (
+            <article className="placeholder-card ai-status-card">
+              <p className="eyebrow">AI Status</p>
+              <div className="metric">
+                <div>
+                  <h3>{progress.title}</h3>
+                  <p className="status-copy">{progress.description}</p>
+                </div>
+                <span className="status-badge">{progress.badge}</span>
+              </div>
+              <div className="panel-actions">
+                <span className="card-chip">
+                  {job?.label ?? (observation.status === "analyzing" ? "観察を解析しています" : "最新状態を保存済み")}
+                </span>
+                <span className="card-chip">
+                  経過{" "}
+                  {formatElapsedSeconds(observation.createdAt, now, getObservationElapsedEnd(observation)) ??
+                    "時間なし"}
+                </span>
+              </div>
+            </article>
+          ) : null}
+
           <div className="card-grid">
             {previewImages.map((image) => (
               <article className="placeholder-card" key={image.id}>
@@ -410,6 +491,12 @@ export function ObservationDetailPage() {
             <p className="status-copy">信頼度 {formatConfidence(observation.confidence ?? summary.confidence)}</p>
             <p>{summary.commonNameJa || "植物名未確定"}</p>
             <p className="status-copy">{summary.scientificName || "学名未確定"}</p>
+            {rawJson ? (
+              <details className="compact-json-details">
+                <summary>AIの生JSONを見る</summary>
+                <pre className="compact-json-pre">{JSON.stringify(rawJson, null, 2)}</pre>
+              </details>
+            ) : null}
           </article>
 
           <div className="card-grid">
@@ -554,13 +641,6 @@ export function ObservationDetailPage() {
           </article>
 
           {notice ? <p className="status-copy">{notice}</p> : null}
-
-          {observation.rawResult ? (
-            <details className="placeholder-card">
-              <summary>解析JSONを表示</summary>
-              <pre className="status-copy">{JSON.stringify(observation.rawResult, null, 2)}</pre>
-            </details>
-          ) : null}
 
           <article className="placeholder-card danger-card">
             <p className="eyebrow">Delete</p>

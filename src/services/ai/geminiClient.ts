@@ -19,6 +19,7 @@ export type ObservationAnalysisResult = {
   visualAppealText: string;
   careNotes: string;
   geminiModel: string;
+  rawJson?: unknown | null;
   analysisTiming: {
     imageCount: number;
     model: string;
@@ -349,5 +350,6 @@ export async function analyzeObservationWithGemini(
   normalized.analysisTiming.imageCount = imageRecords.length;
   normalized.analysisTiming.model = settings.model;
   normalized.geminiModel = settings.model;
+  normalized.rawJson = raw;
   return normalized;
 }

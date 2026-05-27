@@ -573,6 +573,31 @@ h3 {
   background: #f7fbf8;
 }
 
+.ai-status-card {
+  border-color: #c9ddd0;
+  background: #f7fbf8;
+}
+
+.compact-json-details {
+  margin-top: 4px;
+}
+
+.compact-json-details summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.compact-json-pre {
+  max-height: 220px;
+  margin-top: 4px;
+  overflow: auto;
+  font-size: 10px;
+  line-height: 1.3;
+  white-space: pre-wrap;
+}
+
 .plant-photo-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
