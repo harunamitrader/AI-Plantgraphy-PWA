@@ -23,6 +23,8 @@ AI-Plantgraphy PWA は、植物観察と植物図鑑を `PWA` として提供す
 - 既存版との差分: [docs/FEATURE-GAP-ANALYSIS.md](docs/FEATURE-GAP-ANALYSIS.md)
 - 旧版からの移行: [docs/MIGRATION.md](docs/MIGRATION.md)
 - Codex App Server連携案: [docs/CODEX-APP-SERVER-PROPOSAL.md](docs/CODEX-APP-SERVER-PROPOSAL.md)
+- Copilot引継ぎ資料: [docs/COPILOT-HANDOFF-2026-05-27.md](docs/COPILOT-HANDOFF-2026-05-27.md)
+- Copilot引継ぎ用プロンプト: [docs/COPILOT-PROMPT-2026-05-27.md](docs/COPILOT-PROMPT-2026-05-27.md)
 
 ## プロダクト方針
 
