@@ -80,8 +80,8 @@ function normalizePlantProfile(
         ? (raw.plant_profile as Record<string, unknown>)
         : raw;
   const commonNameJa =
-    toStringOrNull(profile.common_name_ja) ??
     toStringOrNull(profile.common_name) ??
+    toStringOrNull(profile.common_name_ja) ??
     toStringOrNull(profile.commonNameJa) ??
     toStringOrNull(profile.plant_name) ??
     fallbackName;
@@ -142,7 +142,7 @@ export async function generatePlantProfileWithGemini(
             parts: [
               {
                 text:
-                  "あなたは植物図鑑の補助をするアシスタントです。返答は JSON のみ。曖昧なら scientific_name は null にしてください。",
+                  "出力はJSONのみ。不明な学名はnull。推測で断定しない。",
               },
             ],
           },
@@ -161,7 +161,7 @@ export async function generatePlantProfileWithGemini(
           ],
           generationConfig: {
             temperature: 0.2,
-            maxOutputTokens: 1536,
+            maxOutputTokens: 1200,
             responseMimeType: "application/json",
           },
         }),
@@ -176,9 +176,9 @@ export async function generatePlantProfileWithGemini(
   }
 
   const primaryPrompt =
-    "植物名から図鑑本文を作成してください。トップレベルキーは common_name_ja, scientific_name, basic_profile_text, visual_appeal_text, care_notes, uncertainty_notes です。追加説明は禁止です。";
+    '植物図鑑の説明を作ります。JSONのみ返してください。\n不明な学名は null にしてください。推測で断定しないでください。\n\n返却JSON:\n{"common_name":null,"scientific_name":null,"basic_profile_text":"","visual_appeal_text":"","care_notes":"","uncertainty_notes":""}\n\n制約:\n- すべてトップレベル\n- basic_profile_text, visual_appeal_text, care_notes は各1〜2文の日本語\n- 箇条書き、Markdown、コードブロックは禁止\n- uncertainty_notes は不確実な点だけを書く。なければ ""';
   const retryPrompt =
-    "JSONだけ返してください。必須キー: common_name_ja, scientific_name, basic_profile_text, visual_appeal_text, care_notes, uncertainty_notes。basic_profile_text, visual_appeal_text, care_notes は必ず1文以上の日本語文字列にしてください。";
+    'JSONのみ返してください。\n{"common_name":null,"scientific_name":null,"basic_profile_text":"","visual_appeal_text":"","care_notes":"","uncertainty_notes":""}\n\nbasic_profile_text, visual_appeal_text, care_notes は空にしないでください。\n学名が不確かなら scientific_name は null にしてください。';
   const generationSeconds = () => Math.max(0, Math.round((performance.now() - startedAt) / 1000));
   let raw: Record<string, unknown>;
   let result: PlantProfileResult;

@@ -272,7 +272,7 @@ export async function analyzeObservationWithGemini(
   const primaryParts: GeminiApiPart[] = [
     {
       text:
-        "植物の観察画像を解析して、必ず JSON だけを返してください。トップレベルキーは common_name, scientific_name, confidence, candidates, visible_features, uncertainty_notes, basic_profile_text, visual_appeal_text, care_notes です。追加説明やコードブロックは不要です。",
+        '植物画像を見て、JSONのみ返してください。\n不明な値は null、配列は []、推測で埋めないでください。\nconfidence は 0〜1 の数値です。\n\n返却JSON:\n{"common_name":null,"scientific_name":null,"confidence":null,"candidates":[{"common_name":null,"scientific_name":null,"confidence":null,"reason":""}],"visible_features":[],"uncertainty_notes":""}\n\n制約:\n- candidates は 0〜3 件\n- visible_features は 0〜5 件\n- 説明文、Markdown、コードブロックは不要',
     },
     {
       text: contextText,
@@ -282,7 +282,7 @@ export async function analyzeObservationWithGemini(
   const retryParts: GeminiApiPart[] = [
     {
       text:
-        "画像の植物を判定し、JSONだけ返してください。必須キー: common_name, scientific_name, confidence, candidates, visible_features, uncertainty_notes。分からない値は null または空配列にしてください。",
+        'JSONのみ返してください。\n{"common_name":null,"scientific_name":null,"confidence":null,"candidates":[],"visible_features":[],"uncertainty_notes":""}\n不明な値は null または [] にしてください。',
     },
     { text: contextText },
     ...imageParts,
@@ -301,7 +301,7 @@ export async function analyzeObservationWithGemini(
           parts: [
             {
               text:
-                "あなたは植物観察の補助をするアシスタントです。出力は JSON のみ。曖昧なら null を使い、根拠のない断定は避けてください。",
+                "出力はJSONのみ。不明はnullまたは[]。根拠のない断定はしない。confidenceは0〜1。",
             },
           ],
         },
@@ -313,7 +313,7 @@ export async function analyzeObservationWithGemini(
         ],
         generationConfig: {
           temperature: 0.2,
-          maxOutputTokens: 2048,
+          maxOutputTokens: 1024,
           responseMimeType: "application/json",
         },
       }),
