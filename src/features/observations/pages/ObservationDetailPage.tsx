@@ -141,7 +141,7 @@ function getObservationElapsedEnd(observation: Observation) {
 
 function extractDisplayedRawJson(rawResult: unknown | null) {
   const root = asRecord(rawResult);
-  return root.rawJson ?? root.raw_json ?? rawResult;
+  return root.rawJson ?? root.raw_json ?? root.extractedJson ?? root.responseText ?? rawResult;
 }
 
 function getObservationProgressCopy(observation: Observation) {
@@ -493,7 +493,7 @@ export function ObservationDetailPage() {
             <p className="status-copy">{summary.scientificName || "学名未確定"}</p>
             {rawJson ? (
               <details className="compact-json-details">
-                <summary>AIの生JSONを見る</summary>
+                <summary>AIの生レスポンス / JSONを見る</summary>
                 <pre className="compact-json-pre">{JSON.stringify(rawJson, null, 2)}</pre>
               </details>
             ) : null}

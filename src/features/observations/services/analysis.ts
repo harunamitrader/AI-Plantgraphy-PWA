@@ -1,4 +1,7 @@
-import { analyzeObservationWithGemini } from "../../../services/ai/geminiClient";
+import {
+  analyzeObservationWithGemini,
+  ObservationAnalysisDebugError,
+} from "../../../services/ai/geminiClient";
 import { useSettingsStore } from "../../settings/store/useSettingsStore";
 import {
   createOrUpdateJob,
@@ -130,8 +133,10 @@ export async function startObservationAnalysis(observationId: string) {
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "解析に失敗しました。";
+    const rawResult = error instanceof ObservationAnalysisDebugError ? error.debugPayload : null;
     await setObservationStatus(observationId, {
       status: "analysis_failed",
+      rawResult,
       errorMessage,
     });
     await updateJob(job.id, {

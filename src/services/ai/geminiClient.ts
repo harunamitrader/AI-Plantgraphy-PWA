@@ -27,6 +27,16 @@ export type ObservationAnalysisResult = {
   };
 };
 
+export class ObservationAnalysisDebugError extends Error {
+  debugPayload: unknown;
+
+  constructor(message: string, debugPayload: unknown) {
+    super(message);
+    this.name = "ObservationAnalysisDebugError";
+    this.debugPayload = debugPayload;
+  }
+}
+
 type GeminiApiPart = {
   text?: string;
   inlineData?: {
@@ -238,10 +248,25 @@ async function parseGeminiText(response: Response) {
     .trim();
 
   if (!text) {
-    throw new Error("Gemini から空の応答が返りました。");
+    throw new ObservationAnalysisDebugError("Gemini から空の応答が返りました。", {
+      responseEnvelope: payload,
+      responseText: "",
+    });
   }
 
-  return JSON.parse(extractJson(text));
+  const extractedJson = extractJson(text);
+  try {
+    return JSON.parse(extractedJson);
+  } catch (error) {
+    throw new ObservationAnalysisDebugError(
+      error instanceof Error ? error.message : "Gemini のJSON解析に失敗しました。",
+      {
+        responseEnvelope: payload,
+        responseText: text,
+        extractedJson,
+      },
+    );
+  }
 }
 
 export async function analyzeObservationWithGemini(
