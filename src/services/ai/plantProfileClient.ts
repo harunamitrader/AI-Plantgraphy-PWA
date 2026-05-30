@@ -1,4 +1,9 @@
 import type { AppSettings } from "../../types/domain";
+import {
+  DEFAULT_PLANT_PRIMARY_PROMPT,
+  DEFAULT_PLANT_RETRY_PROMPT,
+  DEFAULT_PLANT_SYSTEM_PROMPT,
+} from "./promptDefaults";
 
 export type PlantProfileResult = {
   commonNameJa: string;
@@ -128,6 +133,9 @@ export async function generatePlantProfileWithGemini(
       ? input.visibleFeatures.join(", ")
       : "不明";
   const observationNote = input.observationNote?.trim() || "なし";
+  const systemPrompt = settings.plantSystemPrompt.trim() || DEFAULT_PLANT_SYSTEM_PROMPT;
+  const primaryPrompt = settings.plantPrimaryPrompt.trim() || DEFAULT_PLANT_PRIMARY_PROMPT;
+  const retryPrompt = settings.plantRetryPrompt.trim() || DEFAULT_PLANT_RETRY_PROMPT;
 
   async function requestJson(prompt: string) {
     const response = await fetch(
@@ -141,8 +149,7 @@ export async function generatePlantProfileWithGemini(
           systemInstruction: {
             parts: [
               {
-                text:
-                  "出力はJSONのみ。不明な学名はnull。推測で断定しない。",
+                text: systemPrompt,
               },
             ],
           },
@@ -175,10 +182,6 @@ export async function generatePlantProfileWithGemini(
     return parseGeminiText(response);
   }
 
-  const primaryPrompt =
-    '植物図鑑の説明を作ります。JSONのみ返してください。\n不明な学名は null にしてください。推測で断定しないでください。\n\n返却JSON:\n{"common_name":null,"scientific_name":null,"basic_profile_text":"","visual_appeal_text":"","care_notes":"","uncertainty_notes":""}\n\n制約:\n- すべてトップレベル\n- basic_profile_text, visual_appeal_text, care_notes は各1〜2文の日本語\n- 箇条書き、Markdown、コードブロックは禁止\n- uncertainty_notes は不確実な点だけを書く。なければ ""';
-  const retryPrompt =
-    'JSONのみ返してください。\n{"common_name":null,"scientific_name":null,"basic_profile_text":"","visual_appeal_text":"","care_notes":"","uncertainty_notes":""}\n\nbasic_profile_text, visual_appeal_text, care_notes は空にしないでください。\n学名が不確かなら scientific_name は null にしてください。';
   const generationSeconds = () => Math.max(0, Math.round((performance.now() - startedAt) / 1000));
   let raw: Record<string, unknown>;
   let result: PlantProfileResult;

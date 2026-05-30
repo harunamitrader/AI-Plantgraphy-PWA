@@ -35,10 +35,18 @@ export function SettingsPage() {
   const apiKey = useSettingsStore((state) => state.apiKey);
   const model = useSettingsStore((state) => state.model);
   const locationLabels = useSettingsStore((state) => state.locationLabels);
+  const observationSystemPrompt = useSettingsStore((state) => state.observationSystemPrompt);
+  const observationPrimaryPrompt = useSettingsStore((state) => state.observationPrimaryPrompt);
+  const observationRetryPrompt = useSettingsStore((state) => state.observationRetryPrompt);
+  const plantSystemPrompt = useSettingsStore((state) => state.plantSystemPrompt);
+  const plantPrimaryPrompt = useSettingsStore((state) => state.plantPrimaryPrompt);
+  const plantRetryPrompt = useSettingsStore((state) => state.plantRetryPrompt);
   const setApiKey = useSettingsStore((state) => state.setApiKey);
   const setModel = useSettingsStore((state) => state.setModel);
+  const setPrompt = useSettingsStore((state) => state.setPrompt);
   const addLocationLabel = useSettingsStore((state) => state.addLocationLabel);
   const removeLocationLabel = useSettingsStore((state) => state.removeLocationLabel);
+  const resetPrompts = useSettingsStore((state) => state.resetPrompts);
   const reset = useSettingsStore((state) => state.reset);
   const [draftLabel, setDraftLabel] = useState("");
   const [diagnostics, setDiagnostics] = useState<DiagnosticsSummary | null>(null);
@@ -230,6 +238,90 @@ export function SettingsPage() {
         <div className="panel-actions">
           <button className="ghost-button" type="button" onClick={reset}>
             設定を初期化
+          </button>
+        </div>
+      </section>
+
+      <section className="panel stack">
+        <div>
+          <p className="eyebrow">Prompts</p>
+          <h2>AIプロンプト</h2>
+          <p className="status-copy">
+            ここで観察解析と図鑑生成のプロンプトを確認・変更できます。場所、メモ、撮影日などの動的情報は別途自動で付与されます。
+          </p>
+        </div>
+
+        <article className="placeholder-card">
+          <p className="eyebrow">Observation</p>
+          <h3>観察解析プロンプト</h3>
+          <div className="field-grid">
+            <div className="field">
+              <label htmlFor="observation-system-prompt">system</label>
+              <textarea
+                id="observation-system-prompt"
+                rows={3}
+                value={observationSystemPrompt}
+                onChange={(event) => setPrompt("observationSystemPrompt", event.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="observation-primary-prompt">main</label>
+              <textarea
+                id="observation-primary-prompt"
+                rows={8}
+                value={observationPrimaryPrompt}
+                onChange={(event) => setPrompt("observationPrimaryPrompt", event.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="observation-retry-prompt">retry</label>
+              <textarea
+                id="observation-retry-prompt"
+                rows={5}
+                value={observationRetryPrompt}
+                onChange={(event) => setPrompt("observationRetryPrompt", event.target.value)}
+              />
+            </div>
+          </div>
+        </article>
+
+        <article className="placeholder-card">
+          <p className="eyebrow">Plant</p>
+          <h3>図鑑生成プロンプト</h3>
+          <div className="field-grid">
+            <div className="field">
+              <label htmlFor="plant-system-prompt">system</label>
+              <textarea
+                id="plant-system-prompt"
+                rows={3}
+                value={plantSystemPrompt}
+                onChange={(event) => setPrompt("plantSystemPrompt", event.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="plant-primary-prompt">main</label>
+              <textarea
+                id="plant-primary-prompt"
+                rows={8}
+                value={plantPrimaryPrompt}
+                onChange={(event) => setPrompt("plantPrimaryPrompt", event.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="plant-retry-prompt">retry</label>
+              <textarea
+                id="plant-retry-prompt"
+                rows={5}
+                value={plantRetryPrompt}
+                onChange={(event) => setPrompt("plantRetryPrompt", event.target.value)}
+              />
+            </div>
+          </div>
+        </article>
+
+        <div className="panel-actions">
+          <button className="ghost-button" type="button" onClick={resetPrompts}>
+            プロンプトを初期値に戻す
           </button>
         </div>
       </section>

@@ -1,30 +1,34 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { DEFAULT_MODEL } from "../../../app/constants";
 import type { AppSettings } from "../../../types/domain";
+import { defaultSettings, normalizeSettings } from "./settingsDefaults";
+
+type PromptField =
+  | "observationSystemPrompt"
+  | "observationPrimaryPrompt"
+  | "observationRetryPrompt"
+  | "plantSystemPrompt"
+  | "plantPrimaryPrompt"
+  | "plantRetryPrompt";
 
 type SettingsState = AppSettings & {
   setApiKey: (apiKey: string) => void;
   setModel: (model: string) => void;
+  setPrompt: (field: PromptField, value: string) => void;
   addLocationLabel: (label: string) => void;
   removeLocationLabel: (label: string) => void;
   replaceAll: (settings: AppSettings) => void;
+  resetPrompts: () => void;
   reset: () => void;
-};
-
-const defaults: AppSettings = {
-  apiProvider: "gemini",
-  apiKey: "",
-  model: DEFAULT_MODEL,
-  locationLabels: ["自宅", "自宅庭", "近所", "公園"],
 };
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      ...defaults,
+      ...defaultSettings,
       setApiKey: (apiKey) => set({ apiKey }),
       setModel: (model) => set({ model }),
+      setPrompt: (field, value) => set({ [field]: value } as Pick<AppSettings, PromptField>),
       addLocationLabel: (label) =>
         set((state) => {
           const cleaned = label.trim();
@@ -37,11 +41,25 @@ export const useSettingsStore = create<SettingsState>()(
         set((state) => ({
           locationLabels: state.locationLabels.filter((item) => item !== label),
         })),
-      replaceAll: (settings) => set(settings),
-      reset: () => set(defaults),
+      replaceAll: (settings) => set(normalizeSettings(settings)),
+      resetPrompts: () =>
+        set({
+          observationSystemPrompt: defaultSettings.observationSystemPrompt,
+          observationPrimaryPrompt: defaultSettings.observationPrimaryPrompt,
+          observationRetryPrompt: defaultSettings.observationRetryPrompt,
+          plantSystemPrompt: defaultSettings.plantSystemPrompt,
+          plantPrimaryPrompt: defaultSettings.plantPrimaryPrompt,
+          plantRetryPrompt: defaultSettings.plantRetryPrompt,
+        }),
+      reset: () => set(defaultSettings),
     }),
     {
       name: "ai-plantgraphy-pwa-settings",
+      merge: (persistedState, currentState) =>
+        ({
+          ...currentState,
+          ...normalizeSettings(persistedState as Partial<AppSettings> | null),
+        }) satisfies SettingsState,
     },
   ),
 );

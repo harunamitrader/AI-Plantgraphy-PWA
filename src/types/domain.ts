@@ -12,6 +12,12 @@ export type AppSettings = {
   apiKey: string;
   model: string;
   locationLabels: string[];
+  observationSystemPrompt: string;
+  observationPrimaryPrompt: string;
+  observationRetryPrompt: string;
+  plantSystemPrompt: string;
+  plantPrimaryPrompt: string;
+  plantRetryPrompt: string;
 };
 
 export type JobKind = "observation-analysis" | "plant-generation";

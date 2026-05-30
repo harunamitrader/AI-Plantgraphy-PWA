@@ -1,5 +1,10 @@
 import type { AppSettings, Observation } from "../../types/domain";
 import { loadAnalysisImagesForObservation } from "../../storage/repositories/imagesRepository";
+import {
+  DEFAULT_OBSERVATION_PRIMARY_PROMPT,
+  DEFAULT_OBSERVATION_RETRY_PROMPT,
+  DEFAULT_OBSERVATION_SYSTEM_PROMPT,
+} from "./promptDefaults";
 
 export type ObservationAnalysisCandidate = {
   commonNameJa: string | null;
@@ -295,10 +300,12 @@ export async function analyzeObservationWithGemini(
   }
 
   const contextText = `観察メモ: ${observation.note || "なし"}\n場所: ${observation.locationLabel || "未設定"}\n撮影日: ${observation.capturedAt ?? "未設定"}`;
+  const systemPrompt = settings.observationSystemPrompt.trim() || DEFAULT_OBSERVATION_SYSTEM_PROMPT;
+  const primaryPrompt = settings.observationPrimaryPrompt.trim() || DEFAULT_OBSERVATION_PRIMARY_PROMPT;
+  const retryPrompt = settings.observationRetryPrompt.trim() || DEFAULT_OBSERVATION_RETRY_PROMPT;
   const primaryParts: GeminiApiPart[] = [
     {
-      text:
-        '植物画像を見て、JSONのみ返してください。\n不明な値は null、配列は []、推測で埋めないでください。\nconfidence は 0〜1 の数値です。\n\n返却JSON:\n{"common_name":null,"scientific_name":null,"confidence":null,"candidates":[{"common_name":null,"scientific_name":null,"confidence":null,"reason":""}],"visible_features":[],"uncertainty_notes":""}\n\n制約:\n- candidates は 0〜3 件\n- visible_features は 0〜5 件\n- 説明文、Markdown、コードブロックは不要',
+      text: primaryPrompt,
     },
     {
       text: contextText,
@@ -307,8 +314,7 @@ export async function analyzeObservationWithGemini(
   ];
   const retryParts: GeminiApiPart[] = [
     {
-      text:
-        'JSONのみ返してください。\n{"common_name":null,"scientific_name":null,"confidence":null,"candidates":[],"visible_features":[],"uncertainty_notes":""}\n不明な値は null または [] にしてください。',
+      text: retryPrompt,
     },
     { text: contextText },
     ...imageParts,
@@ -326,8 +332,7 @@ export async function analyzeObservationWithGemini(
         systemInstruction: {
           parts: [
             {
-              text:
-                "出力はJSONのみ。不明はnullまたは[]。根拠のない断定はしない。confidenceは0〜1。",
+              text: systemPrompt,
             },
           ],
         },
