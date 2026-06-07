@@ -5,6 +5,11 @@ import {
   DEFAULT_OBSERVATION_RETRY_PROMPT,
   DEFAULT_OBSERVATION_SYSTEM_PROMPT,
 } from "./promptDefaults";
+import {
+  extractJsonCandidate,
+  parseStructuredJsonText,
+  readGeminiText,
+} from "./jsonParsing";
 
 export type ObservationAnalysisCandidate = {
   commonNameJa: string | null;
@@ -50,14 +55,6 @@ type GeminiApiPart = {
   };
 };
 
-type GeminiApiResponse = {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{ text?: string }>;
-    };
-  }>;
-};
-
 function toBase64(buffer: ArrayBuffer) {
   const bytes = new Uint8Array(buffer);
   let binary = "";
@@ -66,16 +63,6 @@ function toBase64(buffer: ArrayBuffer) {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
   }
   return btoa(binary);
-}
-
-function extractJson(text: string) {
-  const trimmed = text.trim();
-  const start = trimmed.indexOf("{");
-  const end = trimmed.lastIndexOf("}");
-  if (start < 0 || end < 0 || end <= start) {
-    throw new Error("Gemini の応答から JSON を抽出できませんでした。");
-  }
-  return trimmed.slice(start, end + 1);
 }
 
 function toStringOrNull(value: unknown) {
@@ -245,12 +232,7 @@ function hasUsableObservationResult(result: ObservationAnalysisResult) {
 }
 
 async function parseGeminiText(response: Response) {
-  const payload = (await response.json()) as GeminiApiResponse;
-  const text = payload.candidates
-    ?.flatMap((candidate) => candidate.content?.parts ?? [])
-    .map((part) => part.text ?? "")
-    .join("")
-    .trim();
+  const { payload, text } = await readGeminiText(response);
 
   if (!text) {
     throw new ObservationAnalysisDebugError("Gemini から空の応答が返りました。", {
@@ -259,20 +241,60 @@ async function parseGeminiText(response: Response) {
     });
   }
 
-  const extractedJson = extractJson(text);
   try {
-    return JSON.parse(extractedJson);
+    const { parsed } = parseStructuredJsonText(text);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Gemini のJSONが object ではありません。");
+    }
+    return parsed;
   } catch (error) {
     throw new ObservationAnalysisDebugError(
       error instanceof Error ? error.message : "Gemini のJSON解析に失敗しました。",
       {
         responseEnvelope: payload,
         responseText: text,
-        extractedJson,
+        extractedJson: extractJsonCandidate(text),
       },
     );
   }
 }
+
+const OBSERVATION_RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    common_name: { type: ["string", "null"] },
+    scientific_name: { type: ["string", "null"] },
+    confidence: { type: ["number", "null"], minimum: 0, maximum: 1 },
+    candidates: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          common_name: { type: ["string", "null"] },
+          scientific_name: { type: ["string", "null"] },
+          confidence: { type: ["number", "null"], minimum: 0, maximum: 1 },
+          reason: { type: "string" },
+        },
+        required: ["common_name", "scientific_name", "confidence", "reason"],
+        additionalProperties: false,
+      },
+    },
+    visible_features: {
+      type: "array",
+      items: { type: "string" },
+    },
+    uncertainty_notes: { type: "string" },
+  },
+  required: [
+    "common_name",
+    "scientific_name",
+    "confidence",
+    "candidates",
+    "visible_features",
+    "uncertainty_notes",
+  ],
+  additionalProperties: false,
+} as const;
 
 export async function analyzeObservationWithGemini(
   observation: Observation,
@@ -345,7 +367,12 @@ export async function analyzeObservationWithGemini(
         generationConfig: {
           temperature: 0.2,
           maxOutputTokens: 1024,
-          responseMimeType: "application/json",
+          responseFormat: {
+            text: {
+              mimeType: "application/json",
+              schema: OBSERVATION_RESPONSE_SCHEMA,
+            },
+          },
         },
       }),
     },

@@ -4,6 +4,7 @@ import {
   DEFAULT_PLANT_RETRY_PROMPT,
   DEFAULT_PLANT_SYSTEM_PROMPT,
 } from "./promptDefaults";
+import { parseStructuredJsonText, readGeminiText } from "./jsonParsing";
 
 export type PlantProfileResult = {
   commonNameJa: string;
@@ -23,14 +24,6 @@ type PlantProfileInput = {
   observationNote?: string;
 };
 
-type GeminiApiResponse = {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{ text?: string }>;
-    };
-  }>;
-};
-
 function toStringOrNull(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -47,30 +40,40 @@ function textFromUnknown(value: unknown): string | null {
   return toStringOrNull(value);
 }
 
-function extractJson(text: string) {
-  const trimmed = text.trim();
-  const start = trimmed.indexOf("{");
-  const end = trimmed.lastIndexOf("}");
-  if (start < 0 || end < 0 || end <= start) {
-    throw new Error("Gemini の応答から JSON を抽出できませんでした。");
-  }
-  return trimmed.slice(start, end + 1);
-}
-
 async function parseGeminiText(response: Response) {
-  const payload = (await response.json()) as GeminiApiResponse;
-  const text = payload.candidates
-    ?.flatMap((candidate) => candidate.content?.parts ?? [])
-    .map((part) => part.text ?? "")
-    .join("")
-    .trim();
+  const { text } = await readGeminiText(response);
 
   if (!text) {
     throw new Error("Gemini から空の応答が返りました。");
   }
 
-  return JSON.parse(extractJson(text)) as Record<string, unknown>;
+  const { parsed } = parseStructuredJsonText(text);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Gemini のJSONが object ではありません。");
+  }
+  return parsed as Record<string, unknown>;
 }
+
+const PLANT_PROFILE_RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    common_name: { type: ["string", "null"] },
+    scientific_name: { type: ["string", "null"] },
+    basic_profile_text: { type: "string" },
+    visual_appeal_text: { type: "string" },
+    care_notes: { type: "string" },
+    uncertainty_notes: { type: "string" },
+  },
+  required: [
+    "common_name",
+    "scientific_name",
+    "basic_profile_text",
+    "visual_appeal_text",
+    "care_notes",
+    "uncertainty_notes",
+  ],
+  additionalProperties: false,
+} as const;
 
 function normalizePlantProfile(
   raw: Record<string, unknown>,
@@ -169,7 +172,12 @@ export async function generatePlantProfileWithGemini(
           generationConfig: {
             temperature: 0.2,
             maxOutputTokens: 1200,
-            responseMimeType: "application/json",
+            responseFormat: {
+              text: {
+                mimeType: "application/json",
+                schema: PLANT_PROFILE_RESPONSE_SCHEMA,
+              },
+            },
           },
         }),
       },
