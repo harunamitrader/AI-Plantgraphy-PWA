@@ -57,8 +57,8 @@ async function parseGeminiText(response: Response) {
 const PLANT_PROFILE_RESPONSE_SCHEMA = {
   type: "object",
   properties: {
-    common_name: { type: ["string", "null"] },
-    scientific_name: { type: ["string", "null"] },
+    common_name: { type: "string", nullable: true },
+    scientific_name: { type: "string", nullable: true },
     basic_profile_text: { type: "string" },
     visual_appeal_text: { type: "string" },
     care_notes: { type: "string" },

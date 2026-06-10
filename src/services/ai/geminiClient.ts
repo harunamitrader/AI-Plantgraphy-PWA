@@ -263,17 +263,17 @@ async function parseGeminiText(response: Response) {
 const OBSERVATION_RESPONSE_SCHEMA = {
   type: "object",
   properties: {
-    common_name: { type: ["string", "null"] },
-    scientific_name: { type: ["string", "null"] },
-    confidence: { type: ["number", "null"] },
+    common_name: { type: "string", nullable: true },
+    scientific_name: { type: "string", nullable: true },
+    confidence: { type: "number", nullable: true },
     candidates: {
       type: "array",
       items: {
         type: "object",
         properties: {
-          common_name: { type: ["string", "null"] },
-          scientific_name: { type: ["string", "null"] },
-          confidence: { type: ["number", "null"] },
+          common_name: { type: "string", nullable: true },
+          scientific_name: { type: "string", nullable: true },
+          confidence: { type: "number", nullable: true },
           reason: { type: "string" },
         },
       },
