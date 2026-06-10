@@ -4,7 +4,7 @@ import {
   DEFAULT_PLANT_RETRY_PROMPT,
   DEFAULT_PLANT_SYSTEM_PROMPT,
 } from "./promptDefaults";
-import { parseStructuredJsonText, readGeminiText } from "./jsonParsing";
+import { parseStructuredJsonText, readGeminiError, readGeminiText } from "./jsonParsing";
 
 export type PlantProfileResult = {
   commonNameJa: string;
@@ -64,15 +64,6 @@ const PLANT_PROFILE_RESPONSE_SCHEMA = {
     care_notes: { type: "string" },
     uncertainty_notes: { type: "string" },
   },
-  required: [
-    "common_name",
-    "scientific_name",
-    "basic_profile_text",
-    "visual_appeal_text",
-    "care_notes",
-    "uncertainty_notes",
-  ],
-  additionalProperties: false,
 } as const;
 
 function normalizePlantProfile(
@@ -172,19 +163,16 @@ export async function generatePlantProfileWithGemini(
           generationConfig: {
             temperature: 0.2,
             maxOutputTokens: 1200,
-            responseFormat: {
-              text: {
-                mimeType: "application/json",
-                schema: PLANT_PROFILE_RESPONSE_SCHEMA,
-              },
-            },
+            responseMimeType: "application/json",
+            responseSchema: PLANT_PROFILE_RESPONSE_SCHEMA,
           },
         }),
       },
     );
 
     if (!response.ok) {
-      throw new Error(`Gemini API エラー: ${response.status}`);
+      const { message } = await readGeminiError(response);
+      throw new Error(message);
     }
 
     return parseGeminiText(response);

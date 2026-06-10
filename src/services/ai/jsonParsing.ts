@@ -63,3 +63,45 @@ export async function readGeminiText(response: Response) {
 
   return { payload, text };
 }
+
+function extractGeminiErrorMessage(payload: unknown) {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const root = payload as Record<string, unknown>;
+  const error = root.error;
+  if (!error || typeof error !== "object") {
+    return null;
+  }
+
+  const message = (error as Record<string, unknown>).message;
+  return typeof message === "string" && message.trim() ? message.trim() : null;
+}
+
+export async function readGeminiError(response: Response) {
+  const responseText = await response.text();
+  let responseJson: unknown = null;
+  let detailMessage: string | null = null;
+
+  if (responseText) {
+    try {
+      responseJson = JSON.parse(responseText) as unknown;
+      detailMessage = extractGeminiErrorMessage(responseJson);
+    } catch {
+      detailMessage = responseText.trim() || null;
+    }
+  }
+
+  return {
+    message: detailMessage
+      ? `Gemini API エラー: ${response.status} ${detailMessage}`
+      : `Gemini API エラー: ${response.status}`,
+    details: {
+      status: response.status,
+      statusText: response.statusText,
+      responseText,
+      responseJson,
+    },
+  };
+}

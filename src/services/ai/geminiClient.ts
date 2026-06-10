@@ -8,6 +8,7 @@ import {
 import {
   extractJsonCandidate,
   parseStructuredJsonText,
+  readGeminiError,
   readGeminiText,
 } from "./jsonParsing";
 
@@ -264,7 +265,7 @@ const OBSERVATION_RESPONSE_SCHEMA = {
   properties: {
     common_name: { type: ["string", "null"] },
     scientific_name: { type: ["string", "null"] },
-    confidence: { type: ["number", "null"], minimum: 0, maximum: 1 },
+    confidence: { type: ["number", "null"] },
     candidates: {
       type: "array",
       items: {
@@ -272,11 +273,9 @@ const OBSERVATION_RESPONSE_SCHEMA = {
         properties: {
           common_name: { type: ["string", "null"] },
           scientific_name: { type: ["string", "null"] },
-          confidence: { type: ["number", "null"], minimum: 0, maximum: 1 },
+          confidence: { type: ["number", "null"] },
           reason: { type: "string" },
         },
-        required: ["common_name", "scientific_name", "confidence", "reason"],
-        additionalProperties: false,
       },
     },
     visible_features: {
@@ -285,15 +284,6 @@ const OBSERVATION_RESPONSE_SCHEMA = {
     },
     uncertainty_notes: { type: "string" },
   },
-  required: [
-    "common_name",
-    "scientific_name",
-    "confidence",
-    "candidates",
-    "visible_features",
-    "uncertainty_notes",
-  ],
-  additionalProperties: false,
 } as const;
 
 export async function analyzeObservationWithGemini(
@@ -367,19 +357,16 @@ export async function analyzeObservationWithGemini(
         generationConfig: {
           temperature: 0.2,
           maxOutputTokens: 1024,
-          responseFormat: {
-            text: {
-              mimeType: "application/json",
-              schema: OBSERVATION_RESPONSE_SCHEMA,
-            },
-          },
+          responseMimeType: "application/json",
+          responseSchema: OBSERVATION_RESPONSE_SCHEMA,
         },
       }),
     },
   );
 
     if (!response.ok) {
-      throw new Error(`Gemini API エラー: ${response.status}`);
+      const { message, details } = await readGeminiError(response);
+      throw new ObservationAnalysisDebugError(message, details);
     }
 
     return parseGeminiText(response);
